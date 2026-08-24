@@ -1,0 +1,16 @@
+{
+  "version": "4.3.0",
+  "channel": "stable",
+  "release_date": "2026-07-16",
+  "changelog": [
+    "修复GPU检测返回字符串导致setTypeError崩溃(21次)",
+    "修复分析模块ana_input_ndx属性不存在导致AttributeError崩溃(6次)",
+    "修复无NVIDIA显卡电脑上GROMACS启动崩溃(GMX_DISABLE_GPU_DETECTION)",
+    "重新设计程序图标(分子结构风格)",
+    "修复卸载程序路径处理和编码问题",
+    "修复UI布局在小屏幕上控件重叠问题",
+    "修复溶剂蒸发模块断点续跑逻辑",
+    "修复图标在PyInstaller打包模式下不显示问题",
+    "修复EXE启动闪烁和自动弹窗问题"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "gromacs": {
+    "selected_version": "",
+    "versions": {},
+    "auto_select_best": true,
+    "version_scan_paths": [],
+    "default_version": "gromacs-2026.3-AVX512-CUDA-sm120-final2",
+    "version_whitelist": [
+      "gromacs-2025.1-SM120-AVX512",
+      "gromacs-2026.1-plumed-CUDA",
+      "gromacs-2026.3-AVX2-CUDA",
+      "gromacs-2026.3-AVX512-CUDA",
+      "gromacs-2026.3-AVX512-CUDA-PLUMED",
+      "gromacs-2026.3-AVX512-CUDA-PLUMED-sm120",
+      "gromacs-2026.3-AVX512-CUDA-sm120-final2"
+    ]
+  },
+  "simulation": {
+    "nt": 8,
+    "mem_limit_gb": 8.0,
+    "mem_limit_enabled": true,
+    "use_gpu": false,
+    "gpu_id": 0,
+    "pin": "on",
+    "dlb": "yes",
+    "nb": "gpu",
+    "pme": "gpu",
+    "auto_mode": true
+  },
+  "system": {
+    "work_dir": "",
+    "theme": "dark",
+    "language": "zh_CN",
+    "log_level": "INFO",
+    "auto_save_config": true
+  },
+  "resources": {
+    "max_memory_gb": 0,
+    "max_cpu_cores": 0,
+    "max_gpu_memory_mb": 0,
+    "disk_warning_threshold_gb": 10.0
+  },
+  "monitor": {
+    "interval_seconds": 5,
+    "auto_refresh": true,
+    "max_history_points": 500,
+    "alert_on_high_temp": true,
+    "temp_threshold_k": 400.0
+  },
+  "history": {
+    "recent_projects": [],
+    "max_recent": 10,
+    "command_history": []
+  }
+}

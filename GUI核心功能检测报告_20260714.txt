@@ -1,0 +1,15 @@
+{
+  "检测时间": "2026-07-14",
+  "整体状态": "全部通过",
+  "测试详情": {
+    "模块导入": true,
+    "GromacsService": true,
+    "VersionManager": true,
+    "ResourceMonitor": true,
+    "ConfigManager": true,
+    "WorkflowEngine": true,
+    "GUI代码语法": true,
+    "分析工具增强": true,
+    "真实模拟文件": true
+  }
+}

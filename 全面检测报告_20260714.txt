@@ -1,0 +1,83 @@
+{
+  "检测时间": "2026-07-14",
+  "总版本数": 7,
+  "版本详情": [
+    {
+      "版本名称": "gromacs-2025.1-SM120-AVX512",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2025.1-SM120-AVX512",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2025.1",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2025.1-SM120-AVX512\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2025.1-SM120-AVX512; SIMD instructions:   AVX_512; C compiler flags:    /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /O2 /Ob2 /DNDEBUG; C++ compiler flags:  /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /O2 /Ob2 /DNDEBUG; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.1-plumed-CUDA",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.1-plumed-CUDA",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.1",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "SIMD instructions:   AVX_256; C compiler flags:    /arch:AVX /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /O2 /Ob2 /DNDEBUG; C++ compiler flags:  /arch:AVX /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /O2 /Ob2 /DNDEBUG; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.3-AVX2-CUDA",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX2-CUDA",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.3",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX2-CUDA\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX2-CUDA; SIMD instructions:   AVX2_256; C compiler flags:    /arch:AVX2 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /O2 /Ob2 /DNDEBUG; C++ compiler flags:  /arch:AVX2 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /O2 /Ob2 /DNDEBUG; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.3-AVX512-CUDA",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.3",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA; SIMD instructions:   AVX_512; C compiler flags:    /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068; C++ compiler flags:  /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.3-AVX512-CUDA-PLUMED",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.3",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED; SIMD instructions:   AVX_512; C compiler flags:    /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /arch:AVX512; C++ compiler flags:  /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /arch:AVX512; CUDA compiler flags: -D_WINDOWS -Xcompiler=\" /EHsc\" -Xcompiler=\"-O2 -Ob2\" -DNDEBUG -use_fast_math -static-global-template-stub=false -Xptxas=-warn-double-usage -Xptxas=-Werror -Xcompiler=/Zc:preprocessor -diag-suppress=177 /arch:AVX512; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.3-AVX512-CUDA-PLUMED-sm120",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED-sm120",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.3",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED-sm120\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-PLUMED-sm120; SIMD instructions:   AVX_512; C compiler flags:    /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /arch:AVX512; C++ compiler flags:  /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /arch:AVX512; CUDA compiler flags: -D_WINDOWS -Xcompiler=\" /EHsc\" -Xcompiler=\"-O2 -Ob2\" -DNDEBUG -use_fast_math -static-global-template-stub=false -Xptxas=-warn-double-usage -Xptxas=-Werror -Xcompiler=/Zc:preprocessor -diag-suppress=177 /arch:AVX512; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    },
+    {
+      "版本名称": "gromacs-2026.3-AVX512-CUDA-sm120-final2",
+      "路径": "D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-sm120-final2",
+      "gmx.exe存在": true,
+      "版本信息": "GROMACS version:     2026.3",
+      "GPU支持": "✅ GPU CUDA支持",
+      "PLUMED支持": "✅ PLUMED支持 (静态链接)",
+      "架构信息": "Executable:   D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-sm120-final2\\bin\\gmx.exe; Data prefix:  D:\\YDW\\Trae_Gromacs\\gromacs\\gromacs-2026.3-AVX512-CUDA-sm120-final2; SIMD instructions:   AVX_512; C compiler flags:    /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4101 /wd4267 /wd4090 /wd4068 /arch:AVX512; C++ compiler flags:  /arch:AVX512 /wd4800 /wd4355 /wd4996 /wd4305 /wd4244 /wd4267 /wd4068 /permissive- /utf-8 /analyze /analyze:stacksize 70000 /wd6001 /wd6011 /wd6053 /wd6054 /wd6385 /wd6386 /wd6387 /wd28199 /wd6239 /wd6240 /wd6294 /wd6326 /wd28020 /wd6330 /wd6993 /wd6031 /wd6244 /wd6246 SHELL:-openmp /arch:AVX512; CUDA compiler flags: -D_WINDOWS -Xcompiler=\" /EHsc\" -Xcompiler=\"-O2 -Ob2\" -DNDEBUG -use_fast_math -static-global-template-stub=false -Xptxas=-warn-double-usage -Xptxas=-Werror -Xcompiler=/Zc:preprocessor -diag-suppress=177 /arch:AVX512; ",
+      "缺失文件": [],
+      "状态": "✅ 完整可用"
+    }
+  ]
+}

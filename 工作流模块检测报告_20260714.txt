@@ -1,0 +1,17 @@
+{
+  "检测时间": "2026-07-14 18:32:57",
+  "整体状态": "全部通过",
+  "测试详情": {
+    "片段索引生成器": true,
+    "RDF分析": true,
+    "轨迹预处理": true,
+    "能量分解分析": true,
+    "文件检查功能": true,
+    "GPU/CPU切换": true,
+    "mdrun基本功能": true,
+    "pdb2gmx": true,
+    "editconf": true,
+    "solvate": true,
+    "genion": true
+  }
+}

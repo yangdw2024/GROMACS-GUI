@@ -1,0 +1,74 @@
+# ============================================================
+# GROMACS GUI .gitignore
+# ============================================================
+
+# --- 大型二进制目录 (不应纳入版本控制) ---
+miniconda3/
+gromacs/
+release_package/
+release/
+archives/
+examples/
+test/
+test_cases/
+test_output/
+temp/
+zip/
+build/
+
+# --- 打包产物 ---
+*.zip
+dist/
+*.spec
+build.log
+
+# --- Python 缓存 ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+
+# --- 日志与崩溃报告 ---
+*.log
+source/logs/
+gromacs_gui.log
+gromacs_gui.lock
+*.lock
+
+# --- IDE与编辑器 ---
+.trae-cn/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- 系统文件 ---
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# --- 临时文件 ---
+*.tmp
+*.bak
+*.orig
+
+# --- CUDA keyring ---
+cuda-keyring*.deb*
+
+# --- 构建生成的文件 ---
+source/version_info.json
+source/gromacs_gui_config.json
+
+# --- 大型二进制资源 (PDF教程不纳入版本控制) ---
+resources/*.pdf
+resources/**/*.pdf
+
+# --- 测试脚本 (开发阶段临时文件) ---
+test_*.py
+test_*.sh
+batch_*.py
+batch_*.sh
+scan_*.py

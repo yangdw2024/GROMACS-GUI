@@ -1,0 +1,30 @@
+============================================================
+GROMACS GUI 崩溃报告
+============================================================
+崩溃ID: 20260718_210402
+时间: 2026-07-18T21:04:02.853971
+线程: MainThread
+
+--- 异常信息 ---
+类型: AttributeError
+消息: 'GromacsGUI' object has no attribute 'ana_input_ndx'
+
+--- 系统信息 ---
+platform: win32
+python_version: 3.13.13 | packaged by Anaconda, Inc. | (main, Apr 14 2026, 06:12:50) [MSC v.1942 64 bit (AMD64)]
+cwd: D:\YDW\Trae_Gromacs
+os: Windows-10-10.0.19045-SP0
+processor: AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD
+
+--- 调用堆栈 ---
+Traceback (most recent call last):
+  File "D:\YDW\Trae_Gromacs\source\gromacs_gui_v4.py", line 6902, in _check_file_status
+    "索引文件": self.ana_input_ndx.text().strip() or "index.ndx",
+                ^^^^^^^^^^^^^^^^^^
+AttributeError: 'GromacsGUI' object has no attribute 'ana_input_ndx'
+
+
+--- 上下文 ---
+argv: ['D:\\YDW\\Trae_Gromacs\\source\\gromacs_gui_v4.py']
+path: ['D:\\YDW\\Trae_Gromacs\\source', 'D:\\YDW\\LAMMPS 64-bit 22Jul2025 with GUI\\Python', 'D:\\YDW\\Trae_Gromacs\\miniconda3\\python313.zip', 'D:\\YDW\\Trae_Gromacs\\miniconda3\\DLLs', 'D:\\YDW\\Trae_Gromacs\\miniconda3\\Lib']
+============================================================
