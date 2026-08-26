@@ -172,21 +172,25 @@ pip install PyQt5 numpy psutil
 python source/gromacs_gui_v4.py
 ```
 
-### ⚡ 方式一：直接下载可执行程序（推荐）
+### ⚡ 方式一：直接下载完整程序包（推荐）
 
 **重要：请勿下载 GitHub 自动生成的 "Source code (zip)"，那只是源码（不到 1MB），无法直接运行！**
 
-请从 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0) 下载完整的可执行程序：
+请从 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0) 下载完整的一体化程序包：
 
 1. 打开 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0)
-2. 下载 **GROMACS_GUI_v4.3.0_Release.zip**（176 MB）—— 这是完整可执行程序
+2. 下载 **GROMACS_GUI_v4.3.0_Full_Package.zip**（1.37 GB）—— 这是一体化完整包（GUI + GROMACS 引擎）
 3. 解压到任意目录
-4. 双击 `start.bat` 启动
-5. 首次使用需配置 GROMACS 路径：设置 → GROMACS 路径
+4. 双击 `start.bat` 启动 —— **直接可用，无需任何额外安装！**
 
-**包含内容**：PyInstaller 打包的 exe、Python 3.13 运行时、PyQt5、numpy、psutil 等所有依赖，无需安装 Python 环境。
+**包含内容**：
+- PyInstaller 打包的 exe、Python 3.13 运行时、PyQt5 等所有依赖
+- GROMACS 2026.x 引擎（含 CUDA 13.0 GPU 加速库）
+- 启动脚本、卸载脚本
 
-**不含**：GROMACS 引擎（需单独安装）。支持 GROMACS 2025.1 / 2026.x。
+**无需安装**：Python、GROMACS、CUDA（均已内置）。
+
+**提示**：即使没有 NVIDIA GPU，软件也会自动切换到纯 CPU 模式正常运行。
 
 ### 方式二：从源码运行
 
