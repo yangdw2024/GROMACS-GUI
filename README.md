@@ -159,7 +159,7 @@ pip install PyQt5 numpy psutil
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/Trae_Gromacs.git
+git clone https://github.com/yangdw2024/Trae_Gromacs.git
 cd Trae_Gromacs
 
 # 安装依赖
@@ -246,7 +246,7 @@ build_release.bat
 
 ## 作者
 
-**Trae** — Copyright (c) 2026 Trae. All rights reserved.
+**YangDewu** — Copyright (c) 2026 YangDewu. All rights reserved.
 
 ---
 
