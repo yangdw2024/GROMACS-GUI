@@ -172,11 +172,38 @@ pip install PyQt5 numpy psutil
 python source/gromacs_gui_v4.py
 ```
 
-### 从发布包运行
+### ⚡ 方式一：直接下载可执行程序（推荐）
 
-1. 下载 `GROMACS_GUI_v4.3.0_Release.zip`
-2. 解压到任意目录
-3. 双击 `启动程序.bat` 或 `GROMACS_GUI_v4.3.0.exe` 即可运行
+**重要：请勿下载 GitHub 自动生成的 "Source code (zip)"，那只是源码（不到 1MB），无法直接运行！**
+
+请从 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0) 下载完整的可执行程序：
+
+1. 打开 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0)
+2. 下载 **GROMACS_GUI_v4.3.0_Release.zip**（176 MB）—— 这是完整可执行程序
+3. 解压到任意目录
+4. 双击 `start.bat` 启动
+5. 首次使用需配置 GROMACS 路径：设置 → GROMACS 路径
+
+**包含内容**：PyInstaller 打包的 exe、Python 3.13 运行时、PyQt5、numpy、psutil 等所有依赖，无需安装 Python 环境。
+
+**不含**：GROMACS 引擎（需单独安装）。支持 GROMACS 2025.1 / 2026.x。
+
+### 方式二：从源码运行
+
+```bash
+# 克隆仓库
+git clone https://github.com/yangdw2024/Trae_Gromacs.git
+cd Trae_Gromacs
+
+# 安装依赖
+pip install PyQt5 numpy psutil
+
+# 将 GROMACS 安装到 gromacs/ 目录（或修改配置中的扫描路径）
+# 确保 gmx.exe 可用
+
+# 启动程序
+python source/gromacs_gui_v4.py
+```
 
 ### 打包发布
 
