@@ -12,7 +12,7 @@
 
 ## 项目简介
 
-GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形化工具，将复杂的 GROMACS 命令行操作封装为直观的图形界面，覆盖从结构准备到结果分析的分子动力学模拟全流程。内置 13 个核心框架模块，提供 NASA FDIR 级别的错误纠正、ISO 27001 级别的审计追踪、以及自动版本管理等企业级能力。
+GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形化工具，将复杂的 GROMACS 命令行操作封装为直观的图形界面，覆盖从结构准备到结果分析的分子动力学模拟全流程。内置错误自动纠正、操作审计、版本管理等模块。
 
 **无需记忆任何命令行参数，零门槛上手分子动力学模拟。**
 
@@ -47,13 +47,13 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 
 ## 架构设计
 
-### 三层分离架构
+### 三层结构
 
 ```
 ┌─────────────────────────────────────────────┐
 │              UI 层                           │  PyQt5 图形界面
 ├─────────────────────────────────────────────┤
-│           核心框架层 (13 模块)                 │  单例模式 + 设计模式
+│           核心框架层 (15 模块)                 │  配置/日志/监控/版本管理
 ├─────────────────────────────────────────────┤
 │              资源层                           │  GROMACS 引擎
 └─────────────────────────────────────────────┘
@@ -61,27 +61,29 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 
 ### 核心框架模块
 
-| 模块 | 职责 | 设计模式 |
-|------|------|----------|
-| `config_manager` | 配置统一管理，深度合并 + 边界校验 | 单例 + 观察者 |
-| `workflow_engine` | 工作流引擎，6 态状态机 + 断点续跑 | 单例 + 状态机 |
-| `error_handler` | 统一错误处理，12 类分类 + 4 级严重度 | 单例 + 策略 |
-| `correction_mechanism` | NASA FDIR 纠错：GPU 降级 / 内存调优 / 重试退避 | 单例 + 策略 |
-| `review_mechanism` | 三级审查：启动前 / 运行中 / 执行后 | 单例 + 组合 |
-| `event_bus` | 事件总线：通配符订阅 + 优先级 + 弱引用 | 单例 + Pub-Sub |
-| `resource_monitor` | 资源监控：CPU / 内存 / 磁盘 / GPU + 告警 | 单例 + 观察者 |
-| `gromacs_service` | GROMACS 命令封装 + 版本评分 + TTL 缓存 | 单例 + 外观 |
-| `version_manager` | 版本管理：6 级校验 + SHA256 去重 + 白名单 | 单例 + 管道 |
-| `crash_handler` | 崩溃捕获：全局钩子 + 双格式报告 | 单例 + 拦截器 |
-| `logger` | 日志系统：四级通道（主 + 分级 + 控制台 + UI） | 单例 + 观察者 |
-| `audit_mechanism` | ISO 27001 审计：13 类操作 + 导出 | 单例 + 命令 |
-| `auto_updater` | 自动更新：SHA256 校验 + 备份回滚 | 单例 + 快照 |
+| 模块 | 职责 |
+|------|------|
+| `config_manager` | 配置读写与合并 |
+| `logger` | 日志记录 |
+| `error_handler` | 错误分类与提示 |
+| `resource_monitor` | CPU / 内存 / 磁盘 / GPU 监控 |
+| `gromacs_service` | GROMACS 命令封装与版本识别 |
+| `wsl_gromacs_service` | WSL 下的 GROMACS 命令封装 |
+| `workflow_engine` | 模拟流程状态管理 |
+| `event_bus` | 模块间消息传递 |
+| `review_mechanism` | 运行前 / 中 / 后检查 |
+| `correction_mechanism` | 错误自动纠正（GPU 降级 / 重试） |
+| `audit_mechanism` | 操作审计 |
+| `auto_updater` | 程序自动更新 |
+| `version_manager` | GROMACS 版本管理 |
+| `crash_handler` | 崩溃捕获与报告 |
+| `wsl_update_manager` | WSL 更新管理 |
 
 ### 关键机制
 
-#### NASA FDIR 纠错链
+#### 错误自动纠正
 
-错误发生时按类别自动分派修复策略：
+运行出错时按类别自动处理：
 
 - GPU 不可用 → 自动降级 CPU 模式
 - 内存 >90% → 线程数减半
@@ -89,13 +91,13 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 - 子进程超时 → 超时翻倍重试（最多 3 次）
 - 配置错误 → 回滚默认配置
 
-#### 三级审查体系
+#### 运行检查
 
 ```
-启动前 (Standard)         运行中 (Runtime)          执行后 (Post)
+启动前                      运行中                    执行后
  ├─ 输入文件检查           ├─ 进程存活检查           ├─ 输出文件完整性
  ├─ 参数边界校验           ├─ 输出文件生成检查        ├─ 日志错误扫描
- ├─ 磁盘空间 ≥ 5GB         ├─ 内存使用率监控          └─ 综合判定
+ ├─ 磁盘空间检查           ├─ 内存使用率监控          └─ 综合判定
  └─ GPU 可用性匹配          └─ 资源阈值告警
 ```
 
@@ -107,21 +109,23 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 Trae_Gromacs/
 ├── source/                          # 源代码
 │   ├── gromacs_gui_v4.py            # 主程序 (13,000+ 行)
-│   ├── core/                        # 核心框架 (13 模块)
+│   ├── core/                        # 核心框架 (15 模块)
 │   │   ├── __init__.py
 │   │   ├── config_manager.py       # 配置管理
-│   │   ├── workflow_engine.py       # 工作流引擎
+│   │   ├── logger.py               # 日志记录
 │   │   ├── error_handler.py        # 错误处理
-│   │   ├── correction_mechanism.py # FDIR 纠错
-│   │   ├── review_mechanism.py      # 审查机制
-│   │   ├── event_bus.py            # 事件总线
 │   │   ├── resource_monitor.py     # 资源监控
-│   │   ├── gromacs_service.py      # GROMACS 服务
+│   │   ├── gromacs_service.py      # GROMACS 命令封装
+│   │   ├── wsl_gromacs_service.py  # WSL GROMACS 命令封装
+│   │   ├── workflow_engine.py      # 工作流状态管理
+│   │   ├── event_bus.py            # 模块间消息传递
+│   │   ├── review_mechanism.py      # 运行检查
+│   │   ├── correction_mechanism.py # 错误自动纠正
+│   │   ├── audit_mechanism.py      # 操作审计
+│   │   ├── auto_updater.py         # 自动更新
 │   │   ├── version_manager.py      # 版本管理
 │   │   ├── crash_handler.py        # 崩溃捕获
-│   │   ├── logger.py               # 日志系统
-│   │   ├── audit_mechanism.py      # 审计追踪
-│   │   └── auto_updater.py        # 自动更新
+│   │   └── wsl_update_manager.py   # WSL 更新管理
 │   └── config/                      # 配置文件
 │       ├── app_config.json         # 应用配置
 │       └── latest_version.json     # 版本信息

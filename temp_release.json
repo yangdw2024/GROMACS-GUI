@@ -1,8 +1,0 @@
-{
-  "tag_name": "v4.3.0",
-  "target_commitish": "master",
-  "name": "GROMACS GUI v4.3.0 - ALL-IN-ONE Package",
-  "body": "## GROMACS GUI v4.3.0 - ALL-IN-ONE RELEASE (RECOMMENDED)\n\nThis is the ALL-IN-ONE package with GUI + GROMACS engine bundled together.\n\nAfter downloading, just extract and double-click **start.bat** to run. No separate GROMACS installation needed!\n\n### Package Contents\n- GROMACS_GUI_v4.3.0.exe - Main GUI executable (90 MB)\n- Python 3.13 - Bundled Python runtime\n- PyQt5 - GUI framework\n- GROMACS 2026.x - Full GROMACS engine (1.6 GB)\n- CUDA 13.0 DLLs - GPU acceleration (optional)\n- start.bat - One-click launch script\n- uninstall.bat - Clean removal script\n\n### System Requirements\n- OS: Windows 10/11 (64-bit)\n- RAM: 8 GB minimum\n- Disk: 3 GB free space\n- GPU: NVIDIA + CUDA 13.0+ (OPTIONAL)\n\n### Quick Start\n1. Download GROMACS_GUI_v4.3.0_Full_Package.zip (1.37 GB)\n2. Extract to any folder\n3. Double-click start.bat - DONE!\n\n### No GPU? No Problem!\n- With GPU: GPU auto-enabled\n- Without GPU: Auto CPU mode, all features work\n\n### Author\nYangDewu - Copyright (c) 2026 YangDewu. All rights reserved.\n\n### License\nMIT License",
-  "draft": false,
-  "prerelease": false
-}

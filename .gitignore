@@ -66,9 +66,5 @@ source/gromacs_gui_config.json
 resources/*.pdf
 resources/**/*.pdf
 
-# --- 测试脚本 (开发阶段临时文件) ---
-test_*.py
-test_*.sh
-batch_*.py
-batch_*.sh
-scan_*.py
+# --- 临时测试脚本（不纳入git，正式测试放tests/） ---
+/scratch_*.py
