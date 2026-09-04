@@ -1,0 +1,5 @@
+# GROMACS GUI v4.3.0 运行依赖
+# Python 3.10+ (开发环境 3.13)
+
+PyQt5>=5.15.2
+pyunpack>=0.3
