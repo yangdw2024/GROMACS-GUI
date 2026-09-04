@@ -122,6 +122,7 @@ a = Analysis(
     datas=[
         ('version_info.json', '.'),
         ('core', 'core'),
+        ('gui', 'gui'),
         ('config', 'config'),
         ('../resources', 'resources'),
     ],

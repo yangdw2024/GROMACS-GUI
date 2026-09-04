@@ -53,7 +53,7 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 ┌─────────────────────────────────────────────┐
 │              UI 层                           │  PyQt5 图形界面
 ├─────────────────────────────────────────────┤
-│           核心框架层 (15 模块)                 │  配置/日志/监控/版本管理
+│           核心框架层 (15 个功能模块)            │  配置/日志/监控/版本管理
 ├─────────────────────────────────────────────┤
 │              资源层                           │  GROMACS 引擎
 └─────────────────────────────────────────────┘
@@ -108,9 +108,25 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 ```
 Trae_Gromacs/
 ├── source/                          # 源代码
-│   ├── gromacs_gui_v4.py            # 主程序 (13,000+ 行)
-│   ├── core/                        # 核心框架 (15 模块)
-│   │   ├── __init__.py
+│   ├── main.py                      # 程序入口
+│   ├── gromacs_gui_v4.py            # 兼容入口（转调 gui 包）
+│   ├── gui/                         # GUI 层
+│   │   ├── app_context.py           # 运行时路径/版本配置/GMX与硬件检测
+│   │   ├── main_window.py           # 主窗口 GromacsGUI
+│   │   ├── app.py                   # 启动引导（协议/崩溃处理/单实例）
+│   │   ├── embedded_scripts.py      # 嵌入的溶剂/添加剂删除脚本
+│   │   ├── dialogs/                 # 对话框
+│   │   │   ├── error_diagnosis.py   # 错误诊断
+│   │   │   ├── mdp_editor.py        # MDP 可视化编辑器
+│   │   │   ├── simulation_monitor.py # 实时监控
+│   │   │   ├── custom_template.py   # 自定义模板
+│   │   │   └── help_dialog.py       # 帮助
+│   │   ├── widgets/                 # 自定义控件
+│   │   │   └── curve_widget.py      # 实时曲线
+│   │   └── workers/                 # 工作线程
+│   │       ├── gromacs_worker.py    # GROMACS 执行线程
+│   │       └── data_extractor.py    # 数据提取线程
+│   ├── core/                        # 核心框架 (15 个功能模块)
 │   │   ├── config_manager.py       # 配置管理
 │   │   ├── logger.py               # 日志记录
 │   │   ├── error_handler.py        # 错误处理
@@ -129,13 +145,16 @@ Trae_Gromacs/
 │   └── config/                      # 配置文件
 │       ├── app_config.json         # 应用配置
 │       └── latest_version.json     # 版本信息
+├── tests/                           # pytest 测试
+│   ├── unit/                        # 单元测试
+│   └── integration/                 # 集成测试（需 GROMACS 引擎）
 ├── resources/                       # 资源文件
 │   ├── app_icon.ico                 # 程序图标
 │   ├── app_icon.png
 │   └── GROMACS_GUI使用说明_V4.0.md
-├── build_scripts/                   # 构建脚本
-│   └── build_release.bat           # 一键打包脚本
+├── build_scripts/                   # 构建脚本（仅保留最终版，历史版本在 archive/）
 ├── version.config                   # 版本配置
+├── requirements.txt                 # Python 依赖
 ├── 说明书.md                         # 用户手册
 └── .gitignore
 ```
@@ -156,7 +175,7 @@ Trae_Gromacs/
 ### 安装依赖
 
 ```bash
-pip install PyQt5 numpy psutil
+pip install -r requirements.txt
 ```
 
 ### 从源码运行
@@ -167,7 +186,7 @@ git clone https://github.com/yangdw2024/Trae_Gromacs.git
 cd Trae_Gromacs
 
 # 安装依赖
-pip install PyQt5 numpy psutil
+pip install -r requirements.txt
 
 # 将 GROMACS 安装到 gromacs/ 目录（或修改配置中的扫描路径）
 # 确保 gmx.exe 可用

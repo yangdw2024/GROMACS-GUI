@@ -296,20 +296,30 @@ class TestCrashHandler:
 # ============================================================
 
 class TestGUISyntax:
-    """GUI 主程序语法检查"""
+    """GUI 主程序语法检查（主程序已拆分至 gui/ 包）"""
 
     def test_gui_main_syntax_valid(self, source_dir):
-        """gromacs_gui_v4.py 语法正确"""
-        gui_path = source_dir / "gromacs_gui_v4.py"
+        """gui/main_window.py 语法正确"""
+        gui_path = source_dir / "gui" / "main_window.py"
         if not gui_path.exists():
-            pytest.skip("主程序文件不存在")
+            pytest.skip("主窗口文件不存在")
         py_compile.compile(str(gui_path), doraise=True)
 
+    def test_gui_all_modules_syntax_valid(self, source_dir):
+        """gui/ 包所有模块语法正确"""
+        gui_dir = source_dir / "gui"
+        if not gui_dir.exists():
+            pytest.skip("gui 包不存在")
+        py_files = list(gui_dir.rglob("*.py"))
+        assert len(py_files) >= 10, "gui 包模块数量异常"
+        for pf in py_files:
+            py_compile.compile(str(pf), doraise=True)
+
     def test_gui_has_required_methods(self, source_dir):
-        """主程序包含关键方法"""
-        gui_path = source_dir / "gromacs_gui_v4.py"
+        """主窗口包含关键方法"""
+        gui_path = source_dir / "gui" / "main_window.py"
         if not gui_path.exists():
-            pytest.skip("主程序文件不存在")
+            pytest.skip("主窗口文件不存在")
 
         with open(gui_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -329,6 +339,16 @@ class TestGUISyntax:
 
         missing = [m for m in required_methods if f"def {m}" not in content]
         assert missing == [], f"缺少关键方法: {missing}"
+
+    def test_gui_compat_shim_reexports(self, source_dir):
+        """兼容入口 gromacs_gui_v4.py 仍然可用"""
+        shim_path = source_dir / "gromacs_gui_v4.py"
+        if not shim_path.exists():
+            pytest.skip("兼容入口不存在")
+        py_compile.compile(str(shim_path), doraise=True)
+        with open(shim_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "GromacsGUI" in content, "兼容入口缺少 GromacsGUI 再导出"
 
 
 # ============================================================
