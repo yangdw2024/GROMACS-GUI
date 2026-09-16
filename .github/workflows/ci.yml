@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest PyQt5 pyunpack
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit -v --tb=short
+
+      - name: Syntax check all source modules
+        run: |
+          python -c "
+          import py_compile, pathlib
+          for p in pathlib.Path('source').rglob('*.py'):
+              py_compile.compile(str(p), doraise=True)
+          print('all source modules compile OK')
+          "

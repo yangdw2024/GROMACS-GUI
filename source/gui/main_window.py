@@ -18,6 +18,15 @@ from gui.app_context import (
     _get_app_root, VERSION_CONFIG, GMX_EXE, get_performance_recommendations,
     get_gromacs_version_info
 )
+from simulation.mdp_builder import (
+    build_simple_mdp, build_full_mdp, build_umbrella_mdp_files,
+    build_plumed_metad, build_plumed_abf
+)
+from simulation.analysis import (
+    build_analysis_command, build_trajectory_tool_command,
+    build_structure_tool_command, build_preprocessing_commands,
+    build_mmpbsa_command
+)
 
 
 from core import (
@@ -7043,312 +7052,7 @@ gen_vel         = no
         nsteps = self.md_nsteps.value()
         temp = self.md_temp.value()
         press = self.md_pressure.value()
-
-        templates = {
-            "ions": f"""; ions.mdp - 离子位置限制能量最小化
-integrator    = steep
-nsteps        = 1000
-emtol         = 1000.0
-emstep        = 0.01
-
-cutoff-scheme = Verlet
-nstlist       = 10
-ns-type       = grid
-rlist         = 1.0
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.0
-pme_order     = 4
-fourierspacing = 0.16
-
-vdw-type      = cut-off
-rvdw          = 1.0
-DispCorr      = EnerPres
-
-constraints   = none
-""",
-            "em": f"""; em.mdp - 能量最小化
-integrator    = steep
-emtol         = 1000.0
-emstep        = 0.01
-nsteps        = 50000
-
-cutoff-scheme = Verlet
-nstlist       = 10
-ns-type       = grid
-rlist         = 1.0
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.0
-pme_order     = 4
-fourierspacing = 0.16
-
-vdw-type      = cut-off
-rvdw          = 1.0
-DispCorr      = EnerPres
-
-nstenergy     = 1000
-nstlog        = 1000
-constraints   = none
-""",
-            "nvt": f"""; nvt.mdp - 恒温恒容平衡
-define        = -DPOSRES
-integrator    = md
-dt            = {dt}
-nsteps        = {int(50000/dt*1000)}
-tinit         = 0.0
-
-cutoff-scheme = Verlet
-nstlist       = 10
-ns-type       = grid
-rlist         = 1.0
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.0
-pme_order     = 4
-fourierspacing = 0.16
-
-vdw-type      = cut-off
-rvdw          = 1.0
-DispCorr      = EnerPres
-
-tcoupl        = V-rescale
-tc-grps       = System
-tau_t         = 0.1
-ref_t         = {temp}
-
-gen_vel       = yes
-gen_temp      = {temp}
-gen_seed      = -1
-
-constraints   = h-bonds
-constraint_algorithm = lincs
-lincs_iter    = 1
-lincs_order   = 4
-continuation  = no
-
-nstxout       = 0
-nstvout       = 0
-nstfout       = 0
-nstenergy     = 1000
-nstlog        = 1000
-nstcheckpoint = 10000
-nstxtcout     = 5000
-xtc-precision = 1000
-""",
-            "npt": f"""; npt.mdp - 恒温恒压平衡
-define        = -DPOSRES
-integrator    = md
-dt            = {dt}
-nsteps        = {int(100000/dt*1000)}
-tinit         = 0.0
-
-cutoff-scheme = Verlet
-nstlist       = 10
-ns-type       = grid
-rlist         = 1.0
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.0
-pme_order     = 4
-fourierspacing = 0.16
-
-vdw-type      = cut-off
-rvdw          = 1.0
-DispCorr      = EnerPres
-
-tcoupl        = V-rescale
-tc-grps       = System
-tau_t         = 0.1
-ref_t         = {temp}
-
-pcoupl        = C-rescale
-pcoupltype    = isotropic
-tau_p         = 2.0
-ref_p         = {press}
-compressibility = 4.5e-5
-refcoord_scaling = com
-
-gen_vel       = no
-constraints   = h-bonds
-constraint_algorithm = lincs
-lincs_iter    = 1
-lincs_order   = 4
-continuation  = yes
-
-nstxout       = 0
-nstvout       = 0
-nstfout       = 0
-nstenergy     = 1000
-nstlog        = 1000
-nstcheckpoint = 10000
-nstxtcout     = 5000
-xtc-precision = 1000
-""",
-            "md": f"""; md.mdp - 生产模拟
-integrator    = md
-dt            = {dt}
-nsteps        = {nsteps}
-tinit         = 0.0
-
-cutoff-scheme = Verlet
-nstlist       = 10
-ns-type       = grid
-rlist         = 1.0
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.0
-pme_order     = 4
-fourierspacing = 0.16
-
-vdw-type      = cut-off
-rvdw          = 1.0
-DispCorr      = EnerPres
-
-tcoupl        = V-rescale
-tc-grps       = System
-tau_t         = 0.1
-ref_t         = {temp}
-
-pcoupl        = Parrinello-Rahman
-pcoupltype    = isotropic
-tau_p         = 2.0
-ref_p         = {press}
-compressibility = 4.5e-5
-refcoord_scaling = com
-
-gen_vel       = no
-constraints   = h-bonds
-constraint_algorithm = lincs
-lincs_iter    = 1
-lincs_order   = 4
-continuation  = yes
-
-nstxout       = 0
-nstvout       = 0
-nstfout       = 0
-nstenergy     = 5000
-nstlog        = 5000
-nstcheckpoint = 50000
-nstxtcout     = 10000
-xtc-precision = 1000
-
-energygrps    = System
-""",
-            "sa": f"""; sa.mdp - SA溶剂蒸发
-integrator    = md
-dt            = 0.002
-nsteps        = 50000
-tinit         = 0.0
-
-cutoff-scheme = Verlet
-nstlist       = 100
-ns-type       = grid
-rlist         = 1.5
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.5
-pme_order     = 4
-fourierspacing = 0.12
-ewald-rtol    = 1e-5
-
-vdw-type      = cut-off
-rvdw          = 1.5
-DispCorr      = EnerPres
-
-tcoupl        = V-rescale
-tc-grps       = System
-tau_t         = 0.5
-ref_t         = 300
-
-pcoupl        = Parrinello-Rahman
-pcoupltype    = isotropic
-tau_p         = 1.0
-ref_p         = 1.0
-compressibility = 4.5e-5
-
-gen_vel       = no
-constraints   = h-bonds
-constraint_algorithm = lincs
-lincs_iter    = 1
-lincs_order   = 4
-continuation  = yes
-
-nstxout       = 0
-nstvout       = 0
-nstfout       = 0
-nstenergy     = 1000
-nstlog        = 1000
-nstcheckpoint = 10000
-nstxtcout     = 1000
-xtc-precision = 1000
-
-energygrps    = System
-""",
-            "annealing": f"""; annealing.mdp - 模拟退火
-integrator    = md
-dt            = 0.002
-nsteps        = 500000
-tinit         = 0.0
-
-cutoff-scheme = Verlet
-nstlist       = 100
-ns-type       = grid
-rlist         = 1.5
-pbc           = xyz
-
-coulombtype   = PME
-rcoulomb      = 1.5
-pme_order     = 4
-fourierspacing = 0.12
-ewald-rtol    = 1e-5
-
-vdw-type      = cut-off
-rvdw          = 1.5
-DispCorr      = EnerPres
-
-tcoupl        = V-rescale
-tc-grps       = System
-tau_t         = 0.5
-ref_t         = 300
-
-annealing     = single
-annealing_npoints = 7
-annealing_time = 0 100 300 500 700 900 1000
-annealing_temp = 300 373 373 373 373 300 300
-
-pcoupl        = Parrinello-Rahman
-pcoupltype    = isotropic
-tau_p         = 1.0
-ref_p         = 1.0
-compressibility = 4.5e-5
-
-gen_vel       = no
-constraints   = h-bonds
-constraint_algorithm = lincs
-lincs_iter    = 1
-lincs_order   = 4
-continuation  = yes
-
-nstxout       = 0
-nstvout       = 0
-nstfout       = 0
-nstenergy     = 10000
-nstlog        = 10000
-nstcheckpoint = 10000
-nstxtcout     = 10000
-xtc-precision = 1000
-
-energygrps    = System
-""",
-        }
-        return templates.get(mdp_type, "")
+        return build_full_mdp(mdp_type, dt=dt, nsteps=nsteps, temp=temp, press=press)
 
     def open_monitor(self):
         wd = self._get_work_dir()
@@ -7607,98 +7311,7 @@ energygrps    = System
         temp = self.md_temp.value()
         press = self.md_pressure.value()
 
-        templates = {
-            "ions": """; ions.mdp
-integrator  = steep
-nsteps       = 1000
-coulombtype  = PME
-rcoulomb     = 1.0
-rvdw         = 1.0
-pbc          = xyz
-""",
-            "em": f"""; em.mdp
-integrator  = steep
-emtol       = 1000.0
-emstep      = 0.01
-nsteps      = 50000
-nstlist     = 1
-coulombtype = PME
-rcoulomb    = 1.0
-rvdw        = 1.0
-pbc         = xyz
-""",
-            "nvt": f"""; nvt.mdp
-define      = -DPOSRES
-integrator  = md
-dt          = {dt}
-nsteps      = {int(1000/dt*1000)}
-coulombtype = PME
-rcoulomb    = 1.0
-rvdw        = 1.0
-pbc         = xyz
-constraints = h-bonds
-tcoupl      = V-rescale
-tc-grps     = Protein Non-Protein
-tau_t       = 0.1 0.1
-ref_t       = {temp} {temp}
-nstxout     = 5000
-nstvout     = 5000
-nstenergy   = 5000
-nstlog      = 5000
-continuation = no
-""",
-            "npt": f"""; npt.mdp
-define      = -DPOSRES
-integrator  = md
-dt          = {dt}
-nsteps      = {int(1000/dt*1000)}
-coulombtype = PME
-rcoulomb    = 1.0
-rvdw        = 1.0
-pbc         = xyz
-constraints = h-bonds
-tcoupl      = V-rescale
-tc-grps     = Protein Non-Protein
-tau_t       = 0.1 0.1
-ref_t       = {temp} {temp}
-pcoupl      = Parrinello-Rahman
-pcoupltype  = isotropic
-tau_p       = 2.0
-ref_p       = {press}
-compressibility = 4.5e-5
-continuation = yes
-nstxout     = 5000
-nstvout     = 5000
-nstenergy   = 5000
-nstlog      = 5000
-""",
-            "md": f"""; md.mdp
-integrator  = md
-dt          = {dt}
-nsteps      = {nsteps}
-coulombtype = PME
-rcoulomb    = 1.0
-rvdw        = 1.0
-pbc         = xyz
-constraints = h-bonds
-tcoupl      = V-rescale
-tc-grps     = Protein Non-Protein
-tau_t       = 0.1 0.1
-ref_t       = {temp} {temp}
-pcoupl      = Parrinello-Rahman
-pcoupltype  = isotropic
-tau_p       = 2.0
-ref_p       = {press}
-compressibility = 4.5e-5
-continuation = yes
-nstxout     = 5000
-nstvout     = 5000
-nstenergy   = 5000
-nstlog      = 5000
-""",
-        }
-
-        content = templates.get(mdp_type, "")
+        content = build_simple_mdp(mdp_type, dt=dt, nsteps=nsteps, temp=temp, press=press)
         fname = f"{mdp_type}.mdp"
         fpath = os.path.join(wd, fname)
         try:
@@ -7724,51 +7337,9 @@ nstlog      = 5000
         end = self.umb_pull_end.value()
         nwindows = self.umb_pull_nwindows.value()
 
-        delta = (end - start) / (nwindows - 1) if nwindows > 1 else 0
-
-        for i in range(nwindows):
-            pos = start + i * delta
-            content = f"""; umbrella_{i}.mdp
-integrator  = md
-dt          = 0.002
-nsteps      = 500000
-coulombtype = PME
-rcoulomb    = 1.0
-rvdw        = 1.0
-pbc         = xyz
-constraints = h-bonds
-tcoupl      = V-rescale
-tc-grps     = Protein Non-Protein
-tau_t       = 0.1 0.1
-ref_t       = 300 300
-pcoupl      = Parrinello-Rahman
-pcoupltype  = isotropic
-tau_p       = 2.0
-ref_p       = 1.0
-compressibility = 4.5e-5
-continuation = yes
-
-pull = yes
-pull_ngroups = 1
-pull_ncoords = 1
-pull_group0 = {group1}
-pull_group1 = {group2}
-pull_coord1_type = {coord}
-pull_coord1_geometry = distance
-pull_coord1_groups = 0 1
-pull_coord1_k = {force}
-pull_coord1_init = {pos}
-pull_coord1_rate = 0
-pull_coord1_target = {pos}
-pull_coord1_print_com = yes
-
-nstxout     = 5000
-nstvout     = 5000
-nstenergy   = 5000
-nstlog      = 5000
-nstxout-compressed = 5000
-"""
-            fname = f"umbrella_{i}.mdp"
+        for fname, content in build_umbrella_mdp_files(
+            coord, group1, group2, force, start, end, nwindows
+        ):
             fpath = os.path.join(wd, fname)
             with open(fpath, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -7798,12 +7369,7 @@ nstxout-compressed = 5000
         sigma = self.meta_sigma.value()
         fname = self.meta_plumed.text().strip() or "plumed.dat"
 
-        content = f"""# Metadynamics with PLUMED
-d1: DISTANCE ATOMS=1,100
-
-METAD ARG=d1 SIGMA={sigma} HEIGHT={height} BIASFACTOR={biasfactor} TEMP=300
-PRINT ARG=d1 FILE=COLVAR STRIDE=100
-"""
+        content = build_plumed_metad(biasfactor, height, sigma)
         fpath = os.path.join(wd, fname)
         with open(fpath, "w", encoding="utf-8") as f:
             f.write(content)
@@ -7831,12 +7397,7 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
         nbins = self.abf_nbins.value()
         fname = self.abf_plumed.text().strip() or "plumed_abf.dat"
 
-        content = f"""# ABF with PLUMED
-d1: DISTANCE ATOMS=1,100
-
-ABF ARG=d1 MIN={min_val} MAX={max_val} NBINS={nbins}
-PRINT ARG=d1 FILE=COLVAR STRIDE=100
-"""
+        content = build_plumed_abf(min_val, max_val, nbins)
         fpath = os.path.join(wd, fname)
         with open(fpath, "w", encoding="utf-8") as f:
             f.write(content)
@@ -7851,292 +7412,29 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
             return
 
         gmx = self.gmx_path
-        xtc = self.ana_input_xtc.text().strip() or "md.xtc"
-        tpr = self.ana_input_tpr.text().strip() or "md.tpr"
-        gro = self.ana_input_gro.text().strip() or "md.gro"
-        edr = self.ana_input_edr.text().strip() or "md.edr"
-        ndx = self.ana_index.text().strip()
-        b = self.ana_b.value()
-        e = self.ana_e.value()
-        dt_val = self.ana_dt.value()
-
+        files = {
+            "wd": wd,
+            "tpr": self.ana_input_tpr.text().strip() or "md.tpr",
+            "xtc": self.ana_input_xtc.text().strip() or "md.xtc",
+            "gro": self.ana_input_gro.text().strip() or "md.gro",
+            "edr": self.ana_input_edr.text().strip() or "md.edr",
+            "ndx": self.ana_index.text().strip(),
+        }
         w = self.analysis_widgets[key]
-        out = w["out"].text().strip()
-        sel = w["sel"].text().strip()
-        ref = w["ref"].text().strip()
+        opts = {
+            "b": self.ana_b.value(),
+            "e": self.ana_e.value(),
+            "dt": self.ana_dt.value(),
+            "sel": w["sel"].text().strip(),
+            "ref": w["ref"].text().strip(),
+            "out": w["out"].text().strip(),
+        }
 
-        # 修复：stdin_in用于为需要交互式组选择的命令提供输入
-        # 例如: gmx rms需要选择拟合组和计算组，gmx msd需要选择分析组
-        # 不需要stdin的命令保持 None，让Popen使用默认stdin
-        stdin_in = None
-
-        def add_time_args(cmd):
-            if b > 0:
-                cmd += ["-b", str(b)]
-            if e > 0:
-                cmd += ["-e", str(e)]
-            if dt_val > 0:
-                cmd += ["-dt", str(dt_val)]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            return cmd
-
-        cmd = [gmx]
-        step_name = ""
-
-        if key == "energy":
-            out = out or "energy.xvg"
-            step_name = "能量分析"
-            # 修复：gmx energy 需要交互式输入能量项
-            # sel字段为空时使用默认的 Potential
-            # 支持多个能量项（空格分隔），以"0"结束选择
-            energy_terms = sel.strip() if sel.strip() else "Potential"
-            term_list = [t.strip() for t in energy_terms.split() if t.strip()]
-            stdin_in = "\n".join(term_list) + "\n0\n"
-            cmd = add_time_args([gmx, "energy", "-f", edr, "-o", out])
-            self.add_log(f"提取能量项: {' '.join(term_list)}", "info")
-
-        elif key == "rms":
-            out = out or "rmsd.xvg"
-            step_name = "RMSD 分析"
-            ref_struct = ref or tpr
-            cmd_base = [gmx, "rms", "-s", ref_struct, "-f", xtc, "-o", out, "-tu", "ns"]
-            # 增强：支持拟合组选择（通过sel输入 -fit 组名）
-            if sel and sel.startswith("-fit "):
-                fit_group = sel.replace("-fit ", "").strip()
-                cmd_base += ["-fit", "rot+trans"]
-                # 拟合组需要索引文件
-                if ndx:
-                    cmd_base += ["-n", ndx]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx rms 交互式选择拟合组和计算组
-            # 输入两次"0"表示对所有原子进行拟合和计算
-            stdin_in = "0\n0\n"
-
-        elif key == "rmsf":
-            out = out or "rmsf.xvg"
-            step_name = "RMSF 分析"
-            cmd_base = [gmx, "rmsf", "-s", tpr, "-f", xtc, "-o", out, "-res"]
-            # 增强：支持原子组选择
-            if sel:
-                # 如果sel是数字，作为组编号；否则作为选择表达式
-                cmd_base += ["-sel", sel]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx rmsf 交互式选择组（留空使用所有原子）
-            stdin_in = "0\n"
-
-        elif key == "gyrate":
-            out = out or "gyrate.xvg"
-            step_name = "回旋半径"
-            cmd_base = [gmx, "gyrate", "-s", tpr, "-f", xtc, "-o", out]
-            # 增强：支持原子组选择
-            if sel:
-                cmd_base += ["-sel", sel]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx gyrate 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "hbond":
-            out = out or "hbond.xvg"
-            step_name = "氢键分析"
-            cmd = add_time_args([gmx, "hbond", "-s", tpr, "-f", xtc, "-num", out])
-            # 修复：gmx hbond 交互式选择供体和受体组
-            stdin_in = "1\n1\n"
-
-        elif key == "rdf":
-            out = out or "rdf.xvg"
-            step_name = "径向分布函数"
-            cmd_base = [gmx, "rdf", "-s", tpr, "-f", xtc, "-o", out]
-            # 增强：支持参考组、选择组、计算类型
-            if sel:
-                # 解析选择参数，格式如: -ref "group Protein" -sel "group Water" -seltype mol_com
-                ref_group = None
-                sel_group = None
-                seltype_val = None
-                bin_val = None
-                for part in sel.split():
-                    if part.startswith("-ref=") or part.startswith("-ref"):
-                        ref_group = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-sel=") or part.startswith("-sel"):
-                        sel_group = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-seltype=") or part.startswith("-seltype"):
-                        seltype_val = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-bin=") or part.startswith("-bin"):
-                        bin_val = part.split("=", 1)[1] if "=" in part else None
-                # 简化用法：如果sel不是参数格式，直接当作选择组
-                if not ref_group and not sel_group and not sel.startswith("-"):
-                    sel_group = sel
-                if ref_group:
-                    cmd_base += ["-ref", ref_group]
-                if sel_group:
-                    cmd_base += ["-sel", sel_group]
-                if seltype_val:
-                    cmd_base += ["-seltype", seltype_val]
-                if bin_val:
-                    cmd_base += ["-bin", bin_val]
-            # 如果用户设置了参考结构ref，用作ref组
-            if ref and not any(x in sel for x in ["-ref", "-sel"]):
-                cmd_base += ["-ref", ref]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx rdf 交互式选择参考组和选择组
-            # 不带参数时需要选择两组
-            stdin_in = "1\n1\n"
-
-        elif key == "sasa":
-            out = out or "sasa.xvg"
-            step_name = "溶剂可及表面积"
-            cmd = add_time_args([gmx, "sasa", "-s", tpr, "-f", xtc, "-o", out])
-            # 修复：gmx sasa 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "density":
-            out = out or "density.xvg"
-            step_name = "密度分析"
-            cmd_base = [gmx, "density", "-s", tpr, "-f", xtc, "-o", out]
-            # 增强：支持组选择和方向选择
-            if sel:
-                # 解析参数：-d Z (方向) 或 -sl 数量 (切片数)
-                direction = None
-                slices = None
-                for part in sel.split():
-                    if part.startswith("-d=") or part.startswith("-d"):
-                        direction = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-sl=") or part.startswith("-sl"):
-                        slices = part.split("=", 1)[1] if "=" in part else None
-                if direction:
-                    cmd_base += ["-d", direction]
-                if slices:
-                    cmd_base += ["-sl", slices]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx density 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "do_dssp":
-            out = out or "dssp.xpm"
-            step_name = "二级结构分析"
-            cmd = add_time_args([gmx, "do_dssp", "-s", tpr, "-f", xtc, "-xpm", out, "-sc", "scount.xvg"])
-            # 修复：gmx do_dssp 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "msd":
-            out = out or "msd.xvg"
-            step_name = "均方位移"
-            cmd_base = [gmx, "msd", "-s", tpr, "-f", xtc, "-o", out, "-tu", "ns"]
-            # 增强：支持分子类型选择（通过sel输入组名）
-            if sel:
-                cmd_base += ["-sel", sel]
-            # 增强：支持计算扩散系数（-molecules 按分子计算）
-            if ref and "molecules" in ref.lower():
-                cmd_base += ["-molecules"]
-            # 修复：-trestart 必须 >= 轨迹时间步，避免 "Increase -trestart" 错误
-            # 默认轨迹 dt=0.002 ns (2 ps)，设置 trestart=10 ns
-            cmd_base += ["-trestart", "10"]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx msd 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "distance":
-            out = out or "distance.xvg"
-            step_name = "距离分析"
-            # 修复：GROMACS 2026.3 移除了 -o 参数，改用 -oav (平均距离随时间)
-            cmd = add_time_args([gmx, "distance", "-s", tpr, "-f", xtc, "-oav", out])
-            # 修复：gmx distance 交互式选择组（用 -select 或通过位置对）
-            stdin_in = "0\n0\n"
-
-        elif key == "angle":
-            out = out or "angle.xvg"
-            step_name = "角度分析"
-            # 修复：GROMACS 2026.3 移除了 -o 参数，改用 -od (分布) 或 -ov (平均)
-            cmd = add_time_args([gmx, "angle", "-s", tpr, "-f", xtc, "-ov", out])
-            # 修复：gmx angle 交互式选择3个原子
-            stdin_in = "0\n0\n0\n"
-
-        elif key == "covar":
-            out = out or "covar.xvg"
-            step_name = "协方差矩阵"
-            cmd = add_time_args([gmx, "covar", "-s", tpr, "-f", xtc, "-o", out])
-            # 修复：gmx covar 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "eigenvalue":
-            out = out or "eigenval.xvg"
-            step_name = "特征值分解"
-            cmd = add_time_args([gmx, "eigenvalue", "-f", "covar.xvg", "-o", out])
-            # eigenvalue 不需要交互式输入
-
-        elif key == "principal":
-            out = out or "pc.xvg"
-            step_name = "主成分分析"
-            cmd = add_time_args([gmx, "principal", "-s", tpr, "-f", xtc, "-o", out])
-            # 修复：gmx principal 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "trajectory":
-            out = out or "proj.xvg"
-            step_name = "轨迹投影"
-            cmd = add_time_args([gmx, "trajectory", "-s", tpr, "-f", xtc, "-o", out])
-            # trajectory 不需要交互式输入
-
-        elif key == "cluster":
-            out = out or "cluster.xpm"
-            step_name = "聚类分析"
-            cmd_base = [gmx, "cluster", "-s", tpr, "-f", xtc, "-o", out]
-            # 增强：支持聚类方法和距离阈值
-            if sel:
-                # 解析参数：-method linkage -cutoff 0.2
-                method = None
-                cutoff = None
-                for part in sel.split():
-                    if part.startswith("-method=") or part.startswith("-method"):
-                        method = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-cutoff=") or part.startswith("-cutoff"):
-                        cutoff = part.split("=", 1)[1] if "=" in part else None
-                if method:
-                    cmd_base += ["-method", method]
-                if cutoff:
-                    cmd_base += ["-cutoff", cutoff]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx cluster 交互式选择组
-            stdin_in = "0\n"
-
-        elif key == "pairdist":
-            out = out or "pairdist.xvg"
-            step_name = "配对距离分布"
-            cmd_base = [gmx, "pairdist", "-s", tpr, "-f", xtc, "-o", out]
-            # 增强：支持参考组、选择组、计算类型
-            if sel:
-                ref_group = None
-                sel_group = None
-                pd_type = None
-                for part in sel.split():
-                    if part.startswith("-ref=") or part.startswith("-ref"):
-                        ref_group = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-sel=") or part.startswith("-sel"):
-                        sel_group = part.split("=", 1)[1] if "=" in part else None
-                    elif part.startswith("-type=") or part.startswith("-type"):
-                        pd_type = part.split("=", 1)[1] if "=" in part else None
-                if not ref_group and not sel_group and not sel.startswith("-"):
-                    sel_group = sel
-                if ref_group:
-                    cmd_base += ["-ref", ref_group]
-                if sel_group:
-                    cmd_base += ["-sel", sel_group]
-                if pd_type:
-                    cmd_base += ["-type", pd_type]
-            cmd = add_time_args(cmd_base)
-            # 修复：gmx pairdist 交互式选择参考组和选择组
-            stdin_in = "1\n1\n"
-
-        elif key == "saltbr":
-            out = out or "saltbr.xvg"
-            step_name = "盐桥分析"
-            cmd = add_time_args([gmx, "saltbr", "-s", tpr, "-f", xtc, "-o", out])
-            # saltbr 不需要交互式输入
-
-        else:
+        result = build_analysis_command(key, gmx, files, opts)
+        if result is None:
             self.add_log(f"未知分析类型: {key}", "error")
             return
-
+        cmd, step_name, stdin_in = result
         self.run_command([cmd], wd, step_name, stdin_input=stdin_in)
 
     # -------------------------------------------------------------------------
@@ -8154,17 +7452,6 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
         tpr = self.traj_tpr.text().strip() or "md.tpr"
         ndx = self.traj_index.text().strip()
 
-        pbc_text = self.prep_pbc.currentText()
-        pbc_mode = pbc_text.split()[0]  # mol/res/atom/nojump/whole/cluster
-        center_group = self.prep_center.text().strip()
-        fit_text = self.prep_fit.currentText()
-        fit_mode = fit_text.split()[0]  # rot+trans/trans/rot/none
-        fit_ref = self.prep_fit_ref.text().strip()
-        b = self.prep_b.value()
-        e = self.prep_e.value()
-        dt_val = self.prep_dt.value()
-        output = self.prep_output.text().strip() or "md_clean.xtc"
-
         # 检查输入文件
         if not os.path.exists(os.path.join(wd, xtc)):
             QMessageBox.warning(self, "警告", f"轨迹文件不存在: {xtc}")
@@ -8173,49 +7460,26 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
             QMessageBox.warning(self, "警告", f"TPR文件不存在: {tpr}")
             return
 
-        commands = []
-
-        # Step 1: PBC修复
-        step1_out = "_prep_step1.xtc"
-        cmd1 = [gmx, "trjconv", "-f", xtc, "-s", tpr, "-o", step1_out, "-pbc", pbc_mode]
-        if pbc_mode in ["mol", "res", "cluster"] and center_group:
-            cmd1 += ["-center"]
-        if ndx and os.path.exists(os.path.join(wd, ndx)):
-            cmd1 += ["-n", ndx]
-        # PBC修复需要选择输出组，使用echo管道
-        commands.append((cmd1, "Step 1: PBC修复", f"echo 0 0 | ", step1_out))
-
-        # Step 2 & 3: 拟合（同时去除平动/转动）
-        current_input = step1_out
-        if fit_mode != "none":
-            step2_out = "_prep_step2.xtc"
-            cmd2 = [gmx, "trjconv", "-f", current_input, "-s", tpr, "-o", step2_out, "-fit", fit_mode]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd2 += ["-n", ndx]
-            commands.append((cmd2, f"Step 2/3: {fit_mode}拟合", f"echo {fit_ref} 0 | ", step2_out))
-            current_input = step2_out
-
-        # Step 4: 截取平衡段 & Step 5: 降采样
-        final_cmd = [gmx, "trjconv", "-f", current_input, "-s", tpr, "-o", output]
-        if b > 0:
-            final_cmd += ["-b", str(b)]
-        if e > 0:
-            final_cmd += ["-e", str(e)]
-        if dt_val > 0:
-            final_cmd += ["-dt", str(dt_val)]
-        if ndx and os.path.exists(os.path.join(wd, ndx)):
-            final_cmd += ["-n", ndx]
-        commands.append((final_cmd, f"Step 4/5: 截取+降采样 → {output}", "echo 0 | ", output))
+        params = {
+            "wd": wd, "xtc": xtc, "tpr": tpr, "ndx": ndx,
+            "pbc_mode": self.prep_pbc.currentText().split()[0],
+            "center_group": self.prep_center.text().strip(),
+            "fit_mode": self.prep_fit.currentText().split()[0],
+            "fit_ref": self.prep_fit_ref.text().strip(),
+            "b": self.prep_b.value(), "e": self.prep_e.value(),
+            "dt": self.prep_dt.value(),
+            "output": self.prep_output.text().strip() or "md_clean.xtc",
+        }
+        commands = build_preprocessing_commands(gmx, params)
 
         # 执行流水线
-        self.add_log(f"开始轨迹预处理流水线: {xtc} → {output}", "info")
+        self.add_log(f"开始轨迹预处理流水线: {xtc} → {params['output']}", "info")
+        import subprocess
         for i, (cmd, step_name, echo_prefix, out_file) in enumerate(commands, 1):
             self.add_log(f"[{i}/{len(commands)}] {step_name}", "info")
-            # 将echo前缀加入命令，使用shell执行管道
             if echo_prefix:
                 cmd_str = echo_prefix + " ".join(cmd)
                 self.add_log(f"执行: {cmd_str}", "cmd")
-                import subprocess
                 try:
                     result = subprocess.run(
                         cmd_str, shell=True, cwd=wd,
@@ -8237,10 +7501,10 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
             if out_file.startswith("_prep_") and os.path.exists(os.path.join(wd, out_file)):
                 try:
                     os.remove(os.path.join(wd, out_file))
-                except:
+                except Exception:
                     pass
 
-        self.add_log(f"预处理完成: {output}", "success")
+        self.add_log(f"预处理完成: {params['output']}", "success")
 
     # -------------------------------------------------------------------------
     # Part 4: 轨迹处理工具执行
@@ -8251,74 +7515,20 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
             return
 
         gmx = self.gmx_path
-        inp = self.traj_input.text().strip() or "md.xtc"
-        tpr = self.traj_tpr.text().strip() or "md.tpr"
-        ndx = self.traj_index.text().strip()
-
+        files = {
+            "wd": wd,
+            "inp": self.traj_input.text().strip() or "md.xtc",
+            "tpr": self.traj_tpr.text().strip() or "md.tpr",
+            "ndx": self.traj_index.text().strip(),
+        }
         w = self.traj_widgets[key]
-        out = w["out"].text().strip()
         opt = w["opt"].text().strip()
 
-        cmd = [gmx]
-        step_name = ""
-
-        if key == "trjconv":
-            out = out or "md_fit.xtc"
-            step_name = "轨迹转换"
-            cmd = [gmx, "trjconv", "-s", tpr, "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjcat":
-            out = out or "combined.xtc"
-            step_name = "轨迹合并"
-            cmd = [gmx, "trjcat", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjorder":
-            out = out or "ordered.xtc"
-            step_name = "轨迹排序"
-            cmd = [gmx, "trjorder", "-s", tpr, "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjreshape":
-            out = out or "reshaped.xtc"
-            step_name = "轨迹重塑"
-            cmd = [gmx, "trjreshape", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjreduce":
-            out = out or "reduced.xtc"
-            step_name = "轨迹精简"
-            cmd = [gmx, "trjreduce", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjcluster":
-            out = out or "cluster.pdb"
-            step_name = "轨迹聚类"
-            cmd = [gmx, "trjcluster", "-s", tpr, "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "trjstrip":
-            out = out or "protein.xtc"
-            step_name = "轨迹剥离"
-            cmd = [gmx, "trjconv", "-s", tpr, "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        else:
+        result = build_trajectory_tool_command(key, gmx, files, opt)
+        if result is None:
             self.add_log(f"未知轨迹工具: {key}", "error")
             return
-
+        cmd, step_name = result
         self.run_command([cmd], wd, step_name)
 
     # -------------------------------------------------------------------------
@@ -8330,122 +7540,29 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
             return
 
         gmx = self.gmx_path
-        inp = self.struc_input.text().strip() or "protein.pdb"
-        ndx = self.struc_index.text().strip()
-
+        files = {
+            "wd": wd,
+            "inp": self.struc_input.text().strip() or "protein.pdb",
+            "ndx": self.struc_index.text().strip(),
+        }
         w = self.struc_widgets[key]
         out = w["out"].text().strip()
         opt = w["opt"].text().strip()
 
-        cmd = [gmx]
-        step_name = ""
+        # pdb2gmx 需要力场，make_ndx 可选 ndx 输入
+        md_ff = self.md_ff.currentText() if hasattr(self, "md_ff") else ""
+        ndx_inp_val = ""
+        ndx_inp = w.get("ndx_struc", None)
+        if ndx_inp:
+            ndx_inp_val = ndx_inp.text().strip()
 
-        if key == "editconf":
-            out = out or "protein_edit.gro"
-            step_name = "编辑结构"
-            cmd = [gmx, "editconf", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "pdb2gmx":
-            out = out or "protein.gro"
-            step_name = "生成拓扑"
-            cmd = [gmx, "pdb2gmx", "-f", inp, "-o", out, "-p", "topol.top", "-ff", self.md_ff.currentText()]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "genconf":
-            out = out or "protein_multi.gro"
-            step_name = "生成构象"
-            cmd = [gmx, "genconf", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx hbond":
-            out = out or "hbond_analysis.xvg"
-            step_name = "氢键分析"
-            cmd = [gmx, "hbond", "-f", inp, "-num", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-
-        elif key == "gmx rms":
-            out = out or "rmsd.xvg"
-            step_name = "RMSD计算"
-            cmd = [gmx, "rms", "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-
-        elif key == "gmx sasa":
-            out = out or "sasa.xvg"
-            step_name = "表面积计算"
-            cmd = [gmx, "sasa", "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-
-        elif key == "gmx make_ndx":
-            out = out or "index.ndx"
-            step_name = "创建索引"
-            ndx_inp = w.get("ndx_struc", None)
-            if ndx_inp:
-                ndx_inp_val = ndx_inp.text().strip()
-                if ndx_inp_val:
-                    inp = ndx_inp_val
-            cmd = [gmx, "make_ndx", "-f", inp, "-o", out]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx rmsf":
-            out = out or "rmsf.xvg"
-            step_name = "RMSF计算"
-            cmd = [gmx, "rmsf", "-f", inp, "-o", out, "-res"]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx rdf":
-            out = out or "rdf.xvg"
-            step_name = "径向分布函数"
-            cmd = [gmx, "rdf", "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx mindist":
-            out = out or "mindist.xvg"
-            step_name = "最小距离计算"
-            cmd = [gmx, "mindist", "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx genrestr":
-            out = out or "posre.itp"
-            step_name = "生成位置限制"
-            cmd = [gmx, "genrestr", "-f", inp, "-o", out]
-            if ndx and os.path.exists(os.path.join(wd, ndx)):
-                cmd += ["-n", ndx]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx check":
-            step_name = "结构验证"
-            cmd = [gmx, "check", "-f", inp]
-            if opt:
-                cmd += opt.split()
-
-        elif key == "gmx dump":
-            step_name = "文件信息查看"
-            cmd = [gmx, "dump", "-f", inp]
-            if opt:
-                cmd += opt.split()
-
-        else:
+        result = build_structure_tool_command(
+            key, gmx, files, out, opt, md_ff=md_ff, ndx_inp_val=ndx_inp_val
+        )
+        if result is None:
             self.add_log(f"未知结构工具: {key}", "error")
             return
-
+        cmd, step_name = result
         self.run_command([cmd], wd, step_name)
 
     # -------------------------------------------------------------------------
@@ -8456,28 +7573,19 @@ PRINT ARG=d1 FILE=COLVAR STRIDE=100
         if not wd:
             return
 
-        tpr = self.mmpbsa_tpr.text().strip() or "md.tpr"
-        xtc = self.mmpbsa_xtc.text().strip() or "md.xtc"
-        ndx = self.mmpbsa_index.text().strip() or "index.ndx"
-        top = self.mmpbsa_top.text().strip() or "topol.top"
+        files = {
+            "tpr": self.mmpbsa_tpr.text().strip() or "md.tpr",
+            "xtc": self.mmpbsa_xtc.text().strip() or "md.xtc",
+            "ndx": self.mmpbsa_index.text().strip() or "index.ndx",
+            "top": self.mmpbsa_top.text().strip() or "topol.top",
+        }
+        cmd, step_name = build_mmpbsa_command(files)
 
-        step_name = "MMPBSA 结合自由能计算"
         self.add_log("=" * 60, "cmd")
         self.add_log(step_name, "cmd")
         self.add_log("提示: MMPBSA 需要安装 gmx_MMPBSA 包", "warning")
         self.add_log("  pip install gmx-MMPBSA", "warning")
         self.add_log("=" * 60, "cmd")
-
-        cmd = [
-            "python", "-m", "GMXMMPBSA.app",
-            "-cs", tpr,
-            "-ci", ndx,
-            "-cg", "1", "13",
-            "-ct", xtc,
-            "-cp", top,
-            "-o", "FINAL_RESULTS_MMPBSA.dat",
-            "-nogui"
-        ]
 
         self.run_command([cmd], wd, step_name)
 
