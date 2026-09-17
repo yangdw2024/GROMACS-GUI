@@ -581,3 +581,83 @@ d1: DISTANCE ATOMS=1,100
 ABF ARG=d1 MIN={min_val} MAX={max_val} NBINS={nbins}
 PRINT ARG=d1 FILE=COLVAR STRIDE=100
 """
+
+
+def build_annealing_mdp(
+    prefix: str, times: list, temps: list,
+    annealing_mode: str = "single", dt: float = 0.002
+) -> str:
+    """根据退火曲线动态生成退火 MDP 文件
+
+    times: 时间点列表（ps），temps: 温度点列表（K），长度须相等且 >= 2
+    """
+    npoints = len(times)
+    time_str = " ".join(str(t) for t in times)
+    temp_str = " ".join(str(t) for t in temps)
+    total_time_ps = float(times[-1])
+    nsteps = int(total_time_ps / dt)
+
+    return f"""; {prefix}.mdp - 退火模拟 (Simulated Annealing)
+; 由 GROMACS GUI V3 自动生成
+
+; Run parameters
+integrator  = md
+dt          = {dt}
+nsteps      = {nsteps}    ; {total_time_ps}ps
+
+; Output parameters
+nstxout             = 1000
+nstvout             = 1000
+nstfout             = 1000
+nstxout-compressed  = 1000
+nstenergy           = 1000
+nstlog              = 1000
+nstcheckpoint       = 1000
+
+; Bond parameters
+constraint_algorithm    = lincs
+constraints             = h-bonds
+continuation            = yes
+lincs_iter              = 1
+lincs_order             = 4
+
+; Neighbor searching
+cutoff-scheme   = Verlet
+nstlist         = 100
+ns_type         = grid
+rlist           = 1.5
+pbc             = xyz
+
+; Electrostatics
+coulombtype     = PME
+pme_order       = 4
+fourierspacing  = 0.12
+rcoulomb        = 1.5
+
+; van der Waals
+vdw-type        = Cut-off
+rvdw            = 1.5
+DispCorr        = EnerPres
+
+; Temperature coupling
+tcoupl          = V-rescale
+tc-grps         = system
+tau_t           = 0.5
+ref_t           = {temps[0]}
+
+; Simulated Annealing
+annealing           = {annealing_mode}
+annealing_npoints   = {npoints}
+annealing_time      = {time_str}
+annealing_temp      = {temp_str}
+
+; Pressure coupling
+Pcoupl          = Parrinello-Rahman
+Pcoupltype      = isotropic
+tau_p           = 1.0
+compressibility = 4.5e-5
+ref_p           = 1.0
+
+; Velocity generation
+gen_vel         = no
+"""

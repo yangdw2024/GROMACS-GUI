@@ -14,6 +14,7 @@ from simulation.mdp_builder import (
     build_full_ions_mdp, build_full_em_mdp, build_full_nvt_mdp, build_full_npt_mdp,
     build_full_md_mdp, build_full_sa_mdp, build_full_annealing_mdp, build_full_mdp,
     build_umbrella_mdp_files, build_plumed_metad, build_plumed_abf,
+    build_annealing_mdp,
 )
 
 
@@ -142,6 +143,23 @@ class TestPlumed(unittest.TestCase):
         s = build_plumed_abf(-1.0, 5.0, 50)
         self.assertIn("ABF ARG=d1 MIN=-1.0 MAX=5.0 NBINS=50", s)
         self.assertIn("PRINT ARG=d1 FILE=COLVAR STRIDE=100", s)
+
+
+class TestAnnealingMdp(unittest.TestCase):
+    """动态退火 MDP 生成"""
+
+    def test_basic(self):
+        s = build_annealing_mdp("anneal", ["0", "100", "300"], ["300", "373", "373"])
+        self.assertIn("annealing           = single", s)
+        self.assertIn("annealing_npoints   = 3", s)
+        self.assertIn("annealing_time      = 0 100 300", s)
+        self.assertIn("annealing_temp      = 300 373 373", s)
+        self.assertIn("ref_t           = 300", s)
+        self.assertIn("nsteps      = 150000", s)  # 300ps / 0.002
+
+    def test_periodic_mode(self):
+        s = build_annealing_mdp("a", ["0", "50"], ["300", "400"], annealing_mode="periodic")
+        self.assertIn("annealing           = periodic", s)
 
 
 if __name__ == "__main__":

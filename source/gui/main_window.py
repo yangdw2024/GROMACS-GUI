@@ -20,13 +20,20 @@ from gui.app_context import (
 )
 from simulation.mdp_builder import (
     build_simple_mdp, build_full_mdp, build_umbrella_mdp_files,
-    build_plumed_metad, build_plumed_abf
+    build_plumed_metad, build_plumed_abf, build_annealing_mdp
 )
 from simulation.analysis import (
     build_analysis_command, build_trajectory_tool_command,
     build_structure_tool_command, build_preprocessing_commands,
     build_mmpbsa_command
 )
+from simulation.md_runner import (
+    build_md_step_command, build_annealing_commands,
+    build_evap_loop_commands, build_full_md_pipeline,
+    detect_existing_loops, check_evap_permissions, resolve_path,
+    write_delete_script, setup_evap_work_files
+)
+from gui.script_templates import get_script_template
 
 
 from core import (
@@ -6234,277 +6241,92 @@ class GromacsGUI(QMainWindow):
 
             info = self.md_step_btns[step_key]
             edits = info["edits"]
-            labels = info["labels"]
 
-            def get_val(idx):
-                return edits[idx].text().strip() if idx < len(edits) else ""
+            # 收集步骤专用 widget 值
+            mdrun_widgets = {}
+            box_widgets = {}
+            custom_check = info.get("custom_out_check")
+            custom_edit = info.get("custom_out_edit")
+            restart_check = info.get("restart_check")
+            if custom_check is not None:
+                mdrun_widgets = {
+                    "custom_out_checked": custom_check.isChecked(),
+                    "custom_out": custom_edit.text().strip() if custom_edit else "",
+                    "restart_checked": restart_check.isChecked() if restart_check else False,
+                }
+            if "box_type_combo" in info:
+                box_widgets = {
+                    "box_type": info["box_type_combo"].currentText(),
+                    "size_mode": info["size_mode_combo"].currentText(),
+                    "center": info["center_check"].isChecked(),
+                    "princ": info["princ_check"].isChecked(),
+                    "box_x": info["box_x_spin"].value(),
+                    "box_y": info["box_y_spin"].value(),
+                    "box_z": info["box_z_spin"].value(),
+                    "box_a": info["box_a_spin"].value(),
+                    "angle_alpha": info["angle_alpha_spin"].value(),
+                    "angle_beta": info["angle_beta_spin"].value(),
+                    "angle_gamma": info["angle_gamma_spin"].value(),
+                    "box_size": info["box_size_spin"].value(),
+                }
 
-            def make_cmd(base):
-                return [gmx] + base
+            state = {
+                "ff": self.md_ff.currentText(),
+                "water": self.md_water.currentText(),
+                "ion_conc": self.md_ion_conc.value(),
+                "pdb": self.md_pdb.text().strip() or "protein.pdb",
+                "use_existing_top": self.use_existing_top.isChecked(),
+                "se_gro": self.se_gro_edit.text().strip(),
+                "se_top": self.se_top_edit.text().strip(),
+                "edits": [e.text().strip() for e in edits],
+                "box_widgets": box_widgets,
+                "mdrun_widgets": mdrun_widgets,
+                "mdrun_extra": self._get_mdrun_extra(
+                    is_em=(step_key == "Step 6")
+                ),
+                "wd": wd,
+            }
 
-            ff = self.md_ff.currentText()
-            water = self.md_water.currentText()
-            box_type = self.md_box_type.currentText()
-            box_size = self.md_box_size.value()
-            ion_conc = self.md_ion_conc.value()
-            pdb = self.md_pdb.text().strip() or "protein.pdb"
+            result = build_md_step_command(step_key, gmx, state)
+            kind = result[0]
 
-            cmd = []
-            step_name = step_key
-
-            if step_key == "Step 1":
-                if self.use_existing_top.isChecked():
-                    struct_file = self.se_gro_edit.text().strip() or "input.gro"
-                    top = self.se_top_edit.text().strip() or "topol.top"
-                    struct_path = os.path.join(wd, struct_file)
-                    top_path = os.path.join(wd, top)
-                    if not os.path.isfile(struct_path):
-                        self.add_log(f"错误: 结构文件不存在 - {struct_path}", "error")
-                        return
-                    if not os.path.isfile(top_path):
-                        self.add_log(f"错误: TOP文件不存在 - {top_path}", "error")
-                        return
-                    self.add_log(f"使用已有拓扑: STRUCT={struct_file}, TOP={top}", "info")
-                    self.add_log("已跳过pdb2gmx，直接使用现有文件", "success")
-                    return
-                gro = get_val(1) or "protein.gro"
-                top = get_val(2) or "topol.top"
-                posre = get_val(3) or "posre.itp"
-                inp = get_val(0) or pdb
-                cmd = make_cmd([
-                    "pdb2gmx", "-f", inp, "-o", gro, "-p", top,
-                    "-i", posre, "-ff", ff, "-water", water, "-ignh"
-                ])
-                step_name = "pdb2gmx"
-
-            elif step_key == "Step 2":
-                ingro = get_val(0) or "protein.gro"
-                outgro = get_val(1) or "protein_box.gro"
-                info = self.md_step_btns[step_key]
-                bt_full = info["box_type_combo"].currentText()
-                if "cubic" in bt_full.lower():
-                    bt = "cubic"
-                elif "triclinic" in bt_full.lower():
-                    bt = "triclinic"
-                elif "dodecahedron" in bt_full.lower():
-                    bt = "dodecahedron"
-                elif "octahedron" in bt_full.lower():
-                    bt = "octahedron"
-                else:
-                    bt = "triclinic"
-                is_rect = "rectangular" in bt_full.lower()
-                is_triclinic = "triclinic" in bt_full.lower()
-                is_box_mode = "边长" in info["size_mode_combo"].currentText()
-                params = []
-                if info["center_check"].isChecked():
-                    params.append("-c")
-                if info["princ_check"].isChecked():
-                    params.append("-princ")
-                if is_box_mode:
-                    if is_rect:
-                        x = info["box_x_spin"].value()
-                        y = info["box_y_spin"].value()
-                        z = info["box_z_spin"].value()
-                        params += ["-box", str(x), str(y), str(z)]
-                    elif is_triclinic:
-                        a = info["box_a_spin"].value()
-                        alpha = info["angle_alpha_spin"].value()
-                        beta = info["angle_beta_spin"].value()
-                        gamma = info["angle_gamma_spin"].value()
-                        params += ["-box", str(a), str(a), str(a), "-angles", str(alpha), str(beta), str(gamma)]
-                    else:
-                        a = info["box_a_spin"].value()
-                        params += ["-box", str(a), "-bt", bt]
-                else:
-                    params += ["-bt", bt]
-                    d = info["box_size_spin"].value()
-                    params += ["-d", str(d)]
-                cmd = make_cmd([
-                    "editconf", "-f", ingro, "-o", outgro
-                ] + params)
-                step_name = "editconf"
-
-            elif step_key == "Step 3":
-                ingro = get_val(0) or "protein_box.gro"
-                outgro = get_val(1) or "protein_solv.gro"
-                top = get_val(2) or "topol.top"
-                cmd = make_cmd([
-                    "solvate", "-cp", ingro, "-o", outgro, "-p", top
-                ])
-                step_name = "solvate"
-
-            elif step_key == "Step 4":
-                ingro = get_val(0) or "protein_solv.gro"
-                outgro = get_val(1) or "protein_ions.gro"
-                top = get_val(2) or "topol.top"
-                mdp = get_val(3) or "ions.mdp"
-                tpr = "ions.tpr"
-                conc_str = str(ion_conc)
-                cmd1 = make_cmd([
-                    "grompp", "-f", mdp, "-c", ingro, "-p", top,
-                    "-o", tpr, "-maxwarn", "2"
-                ])
-                cmd2 = make_cmd([
-                    "genion", "-s", tpr, "-o", outgro, "-p", top,
-                    "-pname", "NA", "-nname", "CL", "-neutral",
-                    "-conc", conc_str, "-quiet"
-                ])
-                self.run_command([cmd1, cmd2], wd, step_name="genion")
-                return
-
-            elif step_key == "Step 5":
-                mdp = get_val(0) or "em.mdp"
-                default_gro = self.se_gro_edit.text().strip() or "input.gro" if self.use_existing_top.isChecked() else "protein_ions.gro"
-                ingro = get_val(1) or default_gro
-                tpr = get_val(2) or "em.tpr"
-                top = self.se_top_edit.text().strip() if self.use_existing_top.isChecked() else "topol.top"
-                cmd = make_cmd([
-                    "grompp", "-f", mdp, "-c", ingro, "-p", top,
-                    "-o", tpr, "-maxwarn", "2"
-                ])
-                step_name = "grompp (EM)"
-
-            elif step_key == "Step 6":
-                tpr = get_val(0) or "em.tpr"
-                if tpr.endswith(".tpr.tpr"):
-                    tpr = tpr[:-4]
-                    self.add_log(f"警告: 检测到重复扩展名，已自动修正为 {tpr}", "warning")
-                info = self.md_step_btns[step_key]
-                custom_check = info.get("custom_out_check")
-                custom_edit = info.get("custom_out_edit")
-                if custom_check and custom_check.isChecked() and custom_edit and custom_edit.text().strip():
-                    deffnm = custom_edit.text().strip()
-                else:
-                    deffnm = os.path.splitext(tpr)[0]
-                extra = self._get_mdrun_extra(is_em=True)
-                restart_check = info.get("restart_check")
-                if restart_check and restart_check.isChecked():
-                    cpt_file = os.path.join(wd, f"{deffnm}.cpt")
-                    if os.path.isfile(cpt_file):
-                        extra += ["-cpi", f"{deffnm}.cpt", "-append"]
-                        self.add_log(f"检测到检查点文件，将断点续跑: {deffnm}.cpt", "info")
-                    else:
-                        self.add_log(f"警告: 未找到检查点文件 {deffnm}.cpt，将从头开始", "warning")
-                cmd = make_cmd([
-                    "mdrun", "-v", "-deffnm", deffnm
-                ] + extra)
-                step_name = "mdrun (EM)"
-
-            elif step_key == "Step 7":
-                mdp = get_val(0) or "nvt.mdp"
-                default_gro = self.se_gro_edit.text().strip() or "input.gro" if self.use_existing_top.isChecked() else "em.gro"
-                ingro = get_val(1) or default_gro
-                tpr = get_val(2) or "nvt.tpr"
-                top = self.se_top_edit.text().strip() if self.use_existing_top.isChecked() else "topol.top"
-                cmd = make_cmd([
-                    "grompp", "-f", mdp, "-c", ingro, "-r", ingro,
-                    "-p", top, "-o", tpr, "-maxwarn", "2"
-                ])
-                step_name = "grompp (NVT)"
-
-            elif step_key == "Step 8":
-                tpr = get_val(0) or "nvt.tpr"
-                if tpr.endswith(".tpr.tpr"):
-                    tpr = tpr[:-4]
-                    self.add_log(f"警告: 检测到重复扩展名，已自动修正为 {tpr}", "warning")
-                info = self.md_step_btns[step_key]
-                custom_check = info.get("custom_out_check")
-                custom_edit = info.get("custom_out_edit")
-                if custom_check and custom_check.isChecked() and custom_edit and custom_edit.text().strip():
-                    deffnm = custom_edit.text().strip()
-                else:
-                    deffnm = os.path.splitext(tpr)[0]
-                extra = self._get_mdrun_extra()
-                restart_check = info.get("restart_check")
-                if restart_check and restart_check.isChecked():
-                    cpt_file = os.path.join(wd, f"{deffnm}.cpt")
-                    if os.path.isfile(cpt_file):
-                        extra += ["-cpi", f"{deffnm}.cpt", "-append"]
-                        self.add_log(f"检测到检查点文件，将断点续跑: {deffnm}.cpt", "info")
-                    else:
-                        self.add_log(f"警告: 未找到检查点文件 {deffnm}.cpt，将从头开始", "warning")
-                cmd = make_cmd([
-                    "mdrun", "-deffnm", deffnm
-                ] + extra)
-                step_name = "mdrun (NVT)"
-
-            elif step_key == "Step 9":
-                mdp = get_val(0) or "npt.mdp"
-                ingro = get_val(1) or "nvt.gro"
-                tpr = get_val(2) or "npt.tpr"
-                top = self.se_top_edit.text().strip() if self.use_existing_top.isChecked() else "topol.top"
-                cmd = make_cmd([
-                    "grompp", "-f", mdp, "-c", ingro, "-r", ingro,
-                    "-p", top, "-o", tpr, "-maxwarn", "2"
-                ])
-                step_name = "grompp (NPT)"
-
-            elif step_key == "Step 10":
-                tpr = get_val(0) or "npt.tpr"
-                if tpr.endswith(".tpr.tpr"):
-                    tpr = tpr[:-4]
-                    self.add_log(f"警告: 检测到重复扩展名，已自动修正为 {tpr}", "warning")
-                info = self.md_step_btns[step_key]
-                custom_check = info.get("custom_out_check")
-                custom_edit = info.get("custom_out_edit")
-                if custom_check and custom_check.isChecked() and custom_edit and custom_edit.text().strip():
-                    deffnm = custom_edit.text().strip()
-                else:
-                    deffnm = os.path.splitext(tpr)[0]
-                extra = self._get_mdrun_extra()
-                restart_check = info.get("restart_check")
-                if restart_check and restart_check.isChecked():
-                    cpt_file = os.path.join(wd, f"{deffnm}.cpt")
-                    if os.path.isfile(cpt_file):
-                        extra += ["-cpi", f"{deffnm}.cpt", "-append"]
-                        self.add_log(f"检测到检查点文件，将断点续跑: {deffnm}.cpt", "info")
-                    else:
-                        self.add_log(f"警告: 未找到检查点文件 {deffnm}.cpt，将从头开始", "warning")
-                cmd = make_cmd([
-                    "mdrun", "-deffnm", deffnm
-                ] + extra)
-                step_name = "mdrun (NPT)"
-
-            elif step_key == "Step 11":
-                mdp = get_val(0) or "md.mdp"
-                ingro = get_val(1) or "npt.gro"
-                tpr = get_val(2) or "md.tpr"
-                top = self.se_top_edit.text().strip() if self.use_existing_top.isChecked() else "topol.top"
-                cmd = make_cmd([
-                    "grompp", "-f", mdp, "-c", ingro, "-r", ingro,
-                    "-p", top, "-o", tpr, "-maxwarn", "2"
-                ])
-                step_name = "grompp (MD)"
-
-            elif step_key == "Step 12":
-                tpr = get_val(0) or "md.tpr"
-                if tpr.endswith(".tpr.tpr"):
-                    tpr = tpr[:-4]
-                    self.add_log(f"警告: 检测到重复扩展名，已自动修正为 {tpr}", "warning")
-                info = self.md_step_btns[step_key]
-                custom_check = info.get("custom_out_check")
-                custom_edit = info.get("custom_out_edit")
-                if custom_check and custom_check.isChecked() and custom_edit and custom_edit.text().strip():
-                    deffnm = custom_edit.text().strip()
-                else:
-                    deffnm = os.path.splitext(tpr)[0]
-                extra = self._get_mdrun_extra()
-                restart_check = info.get("restart_check")
-                if restart_check and restart_check.isChecked():
-                    cpt_file = os.path.join(wd, f"{deffnm}.cpt")
-                    if os.path.isfile(cpt_file):
-                        extra += ["-cpi", f"{deffnm}.cpt", "-append"]
-                        self.add_log(f"检测到检查点文件，将断点续跑: {deffnm}.cpt", "info")
-                    else:
-                        self.add_log(f"警告: 未找到检查点文件 {deffnm}.cpt，将从头开始", "warning")
-                cmd = make_cmd([
-                    "mdrun", "-deffnm", deffnm
-                ] + extra)
-                step_name = "mdrun (MD)"
-
-            else:
+            if kind == "unknown":
                 self.add_log(f"未知步骤: {step_key}", "error")
                 return
+
+            if kind == "skip":
+                struct_file, top = result[1], result[2]
+                struct_path = os.path.join(wd, struct_file)
+                top_path = os.path.join(wd, top)
+                if not os.path.isfile(struct_path):
+                    self.add_log(f"错误: 结构文件不存在 - {struct_path}", "error")
+                    return
+                if not os.path.isfile(top_path):
+                    self.add_log(f"错误: TOP文件不存在 - {top_path}", "error")
+                    return
+                self.add_log(f"使用已有拓扑: STRUCT={struct_file}, TOP={top}", "info")
+                self.add_log("已跳过pdb2gmx，直接使用现有文件", "success")
+                return
+
+            if kind == "multi":
+                cmds, step_name = result[1], result[2]
+                self.run_command(cmds, wd, step_name=step_name)
+                return
+
+            # kind == "single"
+            cmd = result[1]
+            step_name = result[2]
+            # mdrun 步可能携带 dup_warning / restart_msg / deffnm
+            if len(result) > 3:
+                dup_warning = result[3]
+                restart_msg = result[4]
+                deffnm = result[5]
+                if dup_warning:
+                    self.add_log(f"警告: {dup_warning}", "warning")
+                if restart_msg == "found":
+                    self.add_log(f"检测到检查点文件，将断点续跑: {deffnm}.cpt", "info")
+                elif restart_msg == "not_found":
+                    self.add_log(f"警告: 未找到检查点文件 {deffnm}.cpt，将从头开始", "warning")
 
             self.run_command([cmd], wd, step_name)
         except Exception as e:
@@ -6548,31 +6370,18 @@ class GromacsGUI(QMainWindow):
 
             # 自动检测最后一轮（未勾选断点续跑时）
             if not restart_check:
-                existing_loops = []
-                for f in os.listdir(wd):
-                    if f.startswith(f"{prefix}_") and f.endswith(".gro"):
-                        # 匹配 evap_X.gro 格式
-                        suffix = f[len(prefix)+1:-4]
-                        if suffix.isdigit():
-                            existing_loops.append(int(suffix))
-                if existing_loops:
-                    start_loop = max(existing_loops) + 1
-                    self.add_log(f"自动检测到已存在第{max(existing_loops)}轮，将从第{start_loop}轮开始", "info")
-                else:
-                    start_loop = 1
+                start_loop, max_existing = detect_existing_loops(wd, prefix)
+                if max_existing is not None:
+                    self.add_log(f"自动检测到已存在第{max_existing}轮，将从第{start_loop}轮开始", "info")
 
             # 检查工作目录权限
-            if not os.path.exists(wd):
-                self.add_log(f"错误: 工作目录不存在 - {wd}", "error")
-                return
-            try:
-                test_file = os.path.join(wd, "_test_write_permission.tmp")
-                with open(test_file, "w") as f:
-                    f.write("test")
-                os.remove(test_file)
-            except PermissionError:
-                self.add_log(f"错误: 工作目录没有写入权限 - {wd}", "error")
-                self.add_log("建议: 1) 以管理员身份运行程序 2) 更换工作目录为用户文件夹 3) 检查目标目录权限设置", "warning")
+            ok, err_type = check_evap_permissions(wd)
+            if not ok:
+                if err_type == "not_exists":
+                    self.add_log(f"错误: 工作目录不存在 - {wd}", "error")
+                elif err_type == "permission_denied":
+                    self.add_log(f"错误: 工作目录没有写入权限 - {wd}", "error")
+                    self.add_log("建议: 1) 以管理员身份运行程序 2) 更换工作目录为用户文件夹 3) 检查目标目录权限设置", "warning")
                 return
 
             # 检查输入
@@ -6590,35 +6399,41 @@ class GromacsGUI(QMainWindow):
                 return
 
             # 校验文件存在（支持相对/绝对路径）
-            def _resolve(p):
-                return p if os.path.isabs(p) else os.path.join(wd, p)
-
             for label, p in [("输入GRO", input_gro), ("拓扑TOP", top_file), ("MDP", mdp_file)]:
-                if not os.path.isfile(_resolve(p)):
+                if not os.path.isfile(resolve_path(wd, p)):
                     self.add_log(f"错误: {label}文件不存在 - {p}", "error")
                     return
 
             # 写出删除分子脚本到工作目录（纯ASCII，无编码问题）
-            if mode_idx == 0:
-                sol_script_path = os.path.join(wd, "delete_solvent.py")
-                with open(sol_script_path, "w", encoding="utf-8") as f:
-                    f.write(DELETE_SOLVENT_SCRIPT)
-                self.add_log(f"已写出脚本: {sol_script_path}", "info")
-                delete_script = "delete_solvent.py"
-            else:
-                add_script_path = os.path.join(wd, "delete_additive_all.py")
-                with open(add_script_path, "w", encoding="utf-8") as f:
-                    f.write(DELETE_ADDITIVE_SCRIPT)
-                self.add_log(f"已写出脚本: {add_script_path}", "info")
-                delete_script = "delete_additive_all.py"
+            delete_script = write_delete_script(wd, mode_idx, DELETE_SOLVENT_SCRIPT, DELETE_ADDITIVE_SCRIPT)
+            self.add_log(f"已写出脚本: {os.path.join(wd, delete_script)}", "info")
 
-            # 文件管理命名（参考用户脚本）
-            original_gro = f"{prefix}_original.gro"
-            original_top = f"{prefix}_original.top"
-            work_gro = f"{prefix}_work.gro"
-            work_top = f"{prefix}_work.top"
-            current_gro = f"{prefix}_current.gro"
-            current_top = f"{prefix}_current.top"
+            # 文件管理命名 + 备份/工作文件设置（含断点续跑）
+            file_info = setup_evap_work_files(wd, input_gro, top_file, prefix, start_loop, mode_idx)
+            if "error" in file_info:
+                err = file_info["error"]
+                if err.startswith("missing_prev_gro:"):
+                    prev_gro = err.split(":", 1)[1]
+                    self.add_log(f"错误: 断点续跑失败，未找到上一轮的GRO文件 - {prev_gro}", "error")
+                elif err == "missing_prev_top":
+                    self.add_log(f"错误: 断点续跑失败，未找到可用拓扑文件", "error")
+                    self.add_log("已查找: " + ", ".join(file_info["possible_tops"]), "error")
+                return
+
+            original_gro = file_info["original_gro"]
+            original_top = file_info["original_top"]
+            work_gro = file_info["work_gro"]
+            work_top = file_info["work_top"]
+            current_gro = file_info["current_gro"]
+            current_top = file_info["current_top"]
+
+            if mode_idx == 0:
+                if start_loop == 1:
+                    self.add_log(f"已备份原始文件: {original_gro}, {original_top}", "info")
+                else:
+                    self.add_log(f"断点续跑: 从第{start_loop}轮开始，使用 {prefix}_{start_loop - 1}.gro 和 {file_info['prev_top_basename']}", "info")
+            else:
+                self.add_log(f"已备份原始文件: {original_gro}, {original_top}", "info")
 
             all_cmds = []
 
@@ -6629,142 +6444,43 @@ class GromacsGUI(QMainWindow):
 
                 self.add_log(f"开始蒸发溶剂: {resname}, 每轮删除{delete_num}个, 从第{start_loop}轮到第{end_loop}轮", "info")
 
-                import shutil
-
-                if start_loop == 1:
-                    shutil.copy(_resolve(input_gro), os.path.join(wd, original_gro))
-                    shutil.copy(_resolve(top_file), os.path.join(wd, original_top))
-                    self.add_log(f"已备份原始文件: {original_gro}, {original_top}", "info")
-                    shutil.copy(_resolve(input_gro), os.path.join(wd, work_gro))
-                    shutil.copy(_resolve(top_file), os.path.join(wd, work_top))
-                else:
-                    prev_loop = start_loop - 1
-                    prev_gro = f"{prefix}_{prev_loop}.gro"
-                    # 修复：断点续跑时拓扑文件有多种可能来源，依次查找
-                    # 1. evap_current.top（程序运行过程中生成的当前拓扑）
-                    # 2. evap_{prev_loop}.top（上一轮的最终拓扑）
-                    # 3. 用户指定的输入拓扑文件
-                    possible_tops = [
-                        os.path.join(wd, f"{prefix}_current.top"),
-                        os.path.join(wd, f"{prefix}_{prev_loop}.top"),
-                        _resolve(top_file),
-                    ]
-                    prev_top = None
-                    for pt in possible_tops:
-                        if os.path.isfile(pt):
-                            prev_top = pt
-                            break
-
-                    if not os.path.isfile(os.path.join(wd, prev_gro)):
-                        self.add_log(f"错误: 断点续跑失败，未找到第{prev_loop}轮的GRO文件 - {prev_gro}", "error")
-                        return
-                    if prev_top is None:
-                        self.add_log(f"错误: 断点续跑失败，未找到可用拓扑文件", "error")
-                        self.add_log("已查找: " + ", ".join(possible_tops), "error")
-                        return
-                    shutil.copy(os.path.join(wd, prev_gro), os.path.join(wd, work_gro))
-                    shutil.copy(prev_top, os.path.join(wd, work_top))
-                    self.add_log(f"断点续跑: 从第{start_loop}轮开始，使用 {prev_gro} 和 {os.path.basename(prev_top)}", "info")
-
                 delete_from = "bottom" if self.evap_source.currentIndex() == 0 else "top"
 
                 for i in range(start_loop, end_loop + 1):
-                    new_gro = f"{prefix}_new.gro"
-                    new_top = f"{prefix}_new.top"
-                    tpr_file = f"{prefix}_{i}.tpr"
-                    deffnm = f"{prefix}_{i}"
-
-                    del_cmd = [
-                        python_exe, delete_script,
-                        "--solvent", resname,
-                        "--delete-num", str(delete_num),
-                        "--atoms-per-mol", str(atoms_per_mol),
-                        "--loop", str(i),
-                        "--delete-from", delete_from,
-                        "--input", work_gro,
-                        "--output", new_gro,
-                        "--topology", work_top,
-                        "--topology-output", new_top,
-                    ]
-                    all_cmds.append(del_cmd)
-
-                    mv_gro_cmd = ["cmd", "/c", "move", "/Y", new_gro, work_gro] if platform.system() == "Windows" else ["mv", new_gro, work_gro]
-                    all_cmds.append(mv_gro_cmd)
-                    mv_top_cmd = ["cmd", "/c", "move", "/Y", new_top, work_top] if platform.system() == "Windows" else ["mv", new_top, work_top]
-                    all_cmds.append(mv_top_cmd)
-
-                    grompp_cmd = [
-                        gmx, "grompp",
-                        "-f", mdp_file,
-                        "-c", work_gro,
-                        "-p", work_top,
-                        "-o", tpr_file,
-                        "-maxwarn", "200"
-                    ]
-                    all_cmds.append(grompp_cmd)
-
-                    mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + self._get_mdrun_extra()
-                    if restart_check and i > start_loop:
-                        prev_cpt = f"{prefix}_{i-1}.cpt"
-                        if os.path.isfile(os.path.join(wd, prev_cpt)):
-                            mdrun_cmd.extend(["-cpi", prev_cpt])
-                            self.add_log(f"第{i}轮将从检查点文件续跑: {prev_cpt}", "info")
-                    all_cmds.append(mdrun_cmd)
-
-                    cp_gro_cmd = ["cmd", "/c", "copy", "/Y", f"{deffnm}.gro", current_gro] if platform.system() == "Windows" else ["cp", f"{deffnm}.gro", current_gro]
-                    all_cmds.append(cp_gro_cmd)
-                    cp_top_cmd = ["cmd", "/c", "copy", "/Y", work_top, current_top] if platform.system() == "Windows" else ["cp", work_top, current_top]
-                    all_cmds.append(cp_top_cmd)
+                    loop_cmds, restart_cpt = build_evap_loop_commands(
+                        loop_idx=i, prefix=prefix, gmx=gmx, python_exe=python_exe,
+                        delete_script=delete_script, resname=resname,
+                        delete_num=delete_num, atoms_per_mol=atoms_per_mol,
+                        delete_from=delete_from, mdp_file=mdp_file,
+                        work_gro=work_gro, work_top=work_top,
+                        current_gro=current_gro, current_top=current_top,
+                        mdrun_extra=self._get_mdrun_extra(), wd=wd,
+                        restart_check=restart_check, start_loop=start_loop,
+                        mode="solvent"
+                    )
+                    if restart_cpt:
+                        self.add_log(f"第{i}轮将从检查点文件续跑: {restart_cpt}", "info")
+                    all_cmds.extend(loop_cmds)
 
             else:
                 # 一次性删除全部添加剂
                 self.add_log(f"删除全部添加剂: {resname}", "info")
-                new_gro = f"{prefix}_new.gro"
-                new_top = f"{prefix}_new.top"
-                tpr_file = f"{prefix}.tpr"
-                deffnm = prefix
 
-                self.add_log(f"文件命名: prefix={prefix}, deffnm={deffnm}, current_gro={current_gro}, current_top={current_top}", "info")
+                self.add_log(f"文件命名: prefix={prefix}, deffnm={prefix}, current_gro={current_gro}, current_top={current_top}", "info")
 
-                import shutil
-                shutil.copy(_resolve(input_gro), os.path.join(wd, original_gro))
-                shutil.copy(_resolve(top_file), os.path.join(wd, original_top))
-                self.add_log(f"已备份原始文件: {original_gro}, {original_top}", "info")
+                loop_cmds, _ = build_evap_loop_commands(
+                    loop_idx=0, prefix=prefix, gmx=gmx, python_exe=python_exe,
+                    delete_script=delete_script, resname=resname,
+                    delete_num=0, atoms_per_mol=atoms_per_mol,
+                    delete_from="", mdp_file=mdp_file,
+                    work_gro=input_gro, work_top=top_file,
+                    current_gro=current_gro, current_top=current_top,
+                    mdrun_extra=self._get_mdrun_extra(), wd=wd,
+                    restart_check=False, start_loop=0,
+                    mode="additive"
+                )
+                all_cmds.extend(loop_cmds)
 
-                del_cmd = [
-                    python_exe, delete_script,
-                    "--additive", resname,
-                    "--atoms-per-mol", str(atoms_per_mol),
-                    "--input", input_gro,
-                    "--output", new_gro,
-                    "--topology", top_file,
-                    "--topology-output", new_top,
-                ]
-                all_cmds.append(del_cmd)
-
-                mv_gro_cmd = ["cmd", "/c", "move", "/Y", new_gro, work_gro] if platform.system() == "Windows" else ["mv", new_gro, work_gro]
-                all_cmds.append(mv_gro_cmd)
-                mv_top_cmd = ["cmd", "/c", "move", "/Y", new_top, work_top] if platform.system() == "Windows" else ["mv", new_top, work_top]
-                all_cmds.append(mv_top_cmd)
-
-                grompp_cmd = [
-                    gmx, "grompp",
-                    "-f", mdp_file,
-                    "-c", work_gro,
-                    "-p", work_top,
-                    "-o", tpr_file,
-                    "-maxwarn", "200"
-                ]
-                all_cmds.append(grompp_cmd)
-
-                mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + self._get_mdrun_extra()
-                all_cmds.append(mdrun_cmd)
-
-                cp_gro_cmd = ["cmd", "/c", "copy", "/Y", f"{deffnm}.gro", current_gro] if platform.system() == "Windows" else ["cp", f"{deffnm}.gro", current_gro]
-                all_cmds.append(cp_gro_cmd)
-                cp_top_cmd = ["cmd", "/c", "copy", "/Y", work_top, current_top] if platform.system() == "Windows" else ["cp", work_top, current_top]
-                all_cmds.append(cp_top_cmd)
-                
                 self.add_log(f"一次性删除模式命令列表 ({len(all_cmds)} 个):", "info")
                 for i, c in enumerate(all_cmds):
                     self.add_log(f"  [{i+1}] {' '.join(c)}", "info")
@@ -6878,70 +6594,7 @@ class GromacsGUI(QMainWindow):
 
             # 生成MDP文件
             mdp_file = os.path.join(wd, f"{prefix}.mdp")
-            mdp_content = f"""; {prefix}.mdp - 退火模拟 (Simulated Annealing)
-; 由 GROMACS GUI V3 自动生成
-
-; Run parameters
-integrator  = md
-dt          = 0.002
-nsteps      = {nsteps}    ; {total_time_ps}ps
-
-; Output parameters
-nstxout             = 1000
-nstvout             = 1000
-nstfout             = 1000
-nstxout-compressed  = 1000
-nstenergy           = 1000
-nstlog              = 1000
-nstcheckpoint       = 1000
-
-; Bond parameters
-constraint_algorithm    = lincs
-constraints             = h-bonds
-continuation            = yes
-lincs_iter              = 1
-lincs_order             = 4
-
-; Neighbor searching
-cutoff-scheme   = Verlet
-nstlist         = 100
-ns_type         = grid
-rlist           = 1.5
-pbc             = xyz
-
-; Electrostatics
-coulombtype     = PME
-pme_order       = 4
-fourierspacing  = 0.12
-rcoulomb        = 1.5
-
-; van der Waals
-vdw-type        = Cut-off
-rvdw            = 1.5
-DispCorr        = EnerPres
-
-; Temperature coupling
-tcoupl          = V-rescale
-tc-grps         = system
-tau_t           = 0.5
-ref_t           = {temps[0]}
-
-; Simulated Annealing
-annealing           = {annealing_mode}
-annealing_npoints   = {npoints}
-annealing_time      = {time_str}
-annealing_temp      = {temp_str}
-
-; Pressure coupling
-Pcoupl          = Parrinello-Rahman
-Pcoupltype      = isotropic
-tau_p           = 1.0
-compressibility = 4.5e-5
-ref_p           = 1.0
-
-; Velocity generation
-gen_vel         = no
-"""
+            mdp_content = build_annealing_mdp(prefix, times, temps, annealing_mode)
 
             with open(mdp_file, 'w', encoding='utf-8') as f:
                 f.write(mdp_content)
@@ -6953,21 +6606,10 @@ gen_vel         = no
             self.add_log(f"模拟时长: {total_time_ps}ps ({nsteps} steps)", "info")
 
             # 构建命令序列: grompp -> mdrun
-            tpr_file = os.path.join(wd, f"{prefix}.tpr")
-
-            # grompp 命令
-            grompp_cmd = [
-                gmx, "grompp",
-                "-f", mdp_file,
-                "-c", gro_path,
-                "-p", top_path,
-                "-o", tpr_file,
-                "-maxwarn", "200"
-            ]
-
-            # mdrun 命令
-            deffnm = os.path.join(wd, prefix)
-            mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + self._get_mdrun_extra()
+            grompp_cmd, mdrun_cmd = build_annealing_commands(
+                gmx, prefix, gro_path, top_path, mdp_file,
+                self._get_mdrun_extra(), wd
+            )
 
             step_name = "退火模拟"
             self.run_command([grompp_cmd, mdrun_cmd], wd, step_name)
@@ -6985,19 +6627,9 @@ gen_vel         = no
             if not gmx or not os.path.isfile(gmx):
                 self.add_log(f"错误: GROMACS可执行文件不存在 - {gmx}", "error")
                 return
-            ff = self.md_ff.currentText()
-            water = self.md_water.currentText()
-            ion_conc = self.md_ion_conc.value()
-            pdb = self.md_pdb.text().strip() or "protein.pdb"
-            top = "topol.top"
 
-            extra_mdrun = self._get_mdrun_extra()
-            extra_em = self._get_mdrun_extra(is_em=True)
-
-            commands = []
-            first_struct = "protein.gro"
-
-            if self.use_existing_top.isChecked():
+            use_existing = self.use_existing_top.isChecked()
+            if use_existing:
                 first_struct = self.se_gro_edit.text().strip() or "input.gro"
                 top = self.se_top_edit.text().strip() or "topol.top"
                 struct_path = os.path.join(wd, first_struct)
@@ -7009,40 +6641,23 @@ gen_vel         = no
                     self.add_log(f"错误: TOP文件不存在 - {top_path}", "error")
                     return
                 self.add_log(f"使用已有拓扑: STRUCT={first_struct}, TOP={top}", "info")
-            else:
-                commands.append([gmx, "pdb2gmx", "-f", pdb, "-o", first_struct, "-p", top,
-                                 "-i", "posre.itp", "-ff", ff, "-water", water, "-ignh"])
 
-            current_gro = first_struct
-            if not self.skip_editconf.isChecked():
-                box_params = self._get_box_params()
-                commands.append([gmx, "editconf", "-f", first_struct, "-o", "protein_box.gro"] + box_params)
-                current_gro = "protein_box.gro"
-            if not self.skip_solvate.isChecked():
-                commands.append([gmx, "solvate", "-cp", current_gro, "-o", "protein_solv.gro", "-p", top])
-                current_gro = "protein_solv.gro"
-
-            if not self.skip_genion.isChecked():
-                commands.append([gmx, "grompp", "-f", "ions.mdp", "-c", current_gro,
-                                 "-p", top, "-o", "ions.tpr", "-maxwarn", "2"])
-                commands.append([gmx, "genion", "-s", "ions.tpr", "-o", "protein_ions.gro",
-                                 "-p", top, "-pname", "NA", "-nname", "CL", "-neutral",
-                                 "-conc", f"{ion_conc:.3f}", "-quiet"])
-                current_gro = "protein_ions.gro"
-
-            commands.append([gmx, "grompp", "-f", "em.mdp", "-c", current_gro,
-                             "-p", top, "-o", "em.tpr", "-maxwarn", "2"])
-            commands.append([gmx, "mdrun", "-v", "-deffnm", "em"] + extra_em)
-            commands.append([gmx, "grompp", "-f", "nvt.mdp", "-c", "em.gro", "-r", "em.gro",
-                             "-p", top, "-o", "nvt.tpr", "-maxwarn", "2"])
-            commands.append([gmx, "mdrun", "-deffnm", "nvt"] + extra_mdrun)
-            commands.append([gmx, "grompp", "-f", "npt.mdp", "-c", "nvt.gro", "-r", "nvt.gro",
-                             "-p", top, "-o", "npt.tpr", "-maxwarn", "2"])
-            commands.append([gmx, "mdrun", "-deffnm", "npt"] + extra_mdrun)
-            commands.append([gmx, "grompp", "-f", "md.mdp", "-c", "npt.gro", "-r", "npt.gro",
-                             "-p", top, "-o", "md.tpr", "-maxwarn", "2"])
-            commands.append([gmx, "mdrun", "-deffnm", "md"] + extra_mdrun)
-
+            state = {
+                "ff": self.md_ff.currentText(),
+                "water": self.md_water.currentText(),
+                "ion_conc": self.md_ion_conc.value(),
+                "pdb": self.md_pdb.text().strip() or "protein.pdb",
+                "use_existing_top": use_existing,
+                "se_gro": self.se_gro_edit.text().strip(),
+                "se_top": self.se_top_edit.text().strip(),
+                "skip_editconf": self.skip_editconf.isChecked(),
+                "skip_solvate": self.skip_solvate.isChecked(),
+                "skip_genion": self.skip_genion.isChecked(),
+                "box_params": self._get_box_params(),
+                "extra_mdrun": self._get_mdrun_extra(),
+                "extra_em": self._get_mdrun_extra(is_em=True),
+            }
+            commands = build_full_md_pipeline(gmx, state)
             self.run_command(commands, wd, step_name="完整MD流程")
         except Exception as e:
             self.add_log(f"运行完整MD流程时发生错误: {str(e)}", "error")
@@ -7775,903 +7390,7 @@ gen_vel         = no
     def _load_script_template(self, key):
         gmx_norm = self.gmx_path.replace("\\", "/")
         script_type = self.script_type.currentText()
-        
-        if "PowerShell" in script_type:
-            if key == "em":
-                text = (
-                    "# 能量最小化脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 1. 生成拓扑 (如果已有topol.top可跳过)\n"
-                    "# & $GMX pdb2gmx -f protein.pdb -o protein.gro -p topol.top -ff amber99sb-ildn -water tip3p -ignh\n\n"
-                    "# 2. 构建盒子\n"
-                    "& $GMX editconf -f protein.gro -o protein_box.gro -c -d 1.0 -bt cubic\n\n"
-                    "# 3. 溶剂化\n"
-                    "& $GMX solvate -cp protein_box.gro -o protein_solv.gro -p topol.top\n\n"
-                    "# 4. 能量最小化\n"
-                    "& $GMX grompp -f em.mdp -c protein_solv.gro -p topol.top -o em.tpr -maxwarn 2\n"
-                    "& $GMX mdrun -deffnm em -v\n\n"
-                    "Write-Host \"能量最小化完成!\"\n"
-                )
-            elif key == "full_md":
-                text = (
-                    "# 完整MD流程脚本模板 (EM -> NVT -> NPT -> MD)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "$steps = @(\n"
-                    "    @{name='EM';  mdp='em.mdp';  prev='protein_solv.gro'; out='em'},\n"
-                    "    @{name='NVT'; mdp='nvt.mdp'; prev='em.gro';       out='nvt'},\n"
-                    "    @{name='NPT'; mdp='npt.mdp'; prev='nvt.gro';      out='npt'},\n"
-                    "    @{name='MD';  mdp='md.mdp';  prev='npt.gro';      out='md'}\n"
-                    ")\n\n"
-                    "foreach ($s in $steps) {\n"
-                    "    Write-Host \"==== 运行 $($s.name) ====\" -ForegroundColor Cyan\n"
-                    "    & $GMX grompp -f $s.mdp -c $s.prev -r $s.prev -p topol.top -o \"$($s.out).tpr\" -maxwarn 2\n"
-                    "    if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "    & $GMX mdrun -deffnm $s.out -v\n"
-                    "    if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "    Write-Host \"$($s.name) 完成\" -ForegroundColor Green\n"
-                    "}\n\n"
-                    "Write-Host \"所有MD步骤完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "clffcl_em_npt":
-                text = (
-                    "# ClFFCl EM+NPT流程模板 (PowerShell)\n"
-                    "# 流程: EM-1 → EM-2 → NPT-1 → NPT-2\n"
-                    "# 使用文件: ydw-em_01.mdp (steep), ydw-em_02.mdp (cg), ydw-npt_01.mdp (1ns), ydw-npt_02.mdp (2ns)\n"
-                    "# 输入: ydw-PM6-ClFFCl.pdb, p4PM6-ClFFCl-mix.top\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# ==== Step 1: 能量最小化 EM-1 (steep) ====\n"
-                    "Write-Host \"==== 运行 EM-1 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-em_01.mdp -c ydw-PM6-ClFFCl.pdb -p p4PM6-ClFFCl-mix.top -o ClFFCl_em1.tpr -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"EM-1 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm ClFFCl_em1 -nt 6 -pin on -nb gpu -pme cpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"EM-1 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"EM-1 完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 2: 能量最小化 EM-2 (cg) ====\n"
-                    "Write-Host \"==== 运行 EM-2 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-em_02.mdp -c ClFFCl_em1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_em2.tpr -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"EM-2 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm ClFFCl_em2 -nt 6 -pin on -nb gpu -pme cpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"EM-2 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"EM-2 完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 3: NPT 平衡 1 (1ns) ====\n"
-                    "Write-Host \"==== 运行 NPT-1 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-npt_01.mdp -c ClFFCl_em2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt1.tpr -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"NPT-1 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm ClFFCl_npt1 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"NPT-1 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"NPT-1 完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 4: NPT 平衡 2 (2ns) ====\n"
-                    "Write-Host \"==== 运行 NPT-2 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-npt_02.mdp -c ClFFCl_npt1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt2.tpr -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"NPT-2 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm ClFFCl_npt2 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"NPT-2 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"NPT-2 完成\" -ForegroundColor Green\n\n"
-                    "Write-Host \"所有步骤完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "clffcl_sa":
-                text = (
-                    "# ClFFCl SA溶剂蒸发流程模板 (PowerShell)\n"
-                    "# 流程: 逐步删除CF溶剂分子，每轮运行10ps NPT\n"
-                    "# 使用文件: ydw-npt-sa.mdp\n"
-                    "# 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 配置参数\n"
-                    "$inputGro = \"ClFFCl_npt2.gro\"\n"
-                    "$topFile = \"p4PM6-ClFFCl-mix.top\"\n"
-                    "$mdpFile = \"ydw-npt-sa.mdp\"\n"
-                    "$prefix = \"ClFFCl_sa\"\n"
-                    "$loops = 500\n"
-                    "$deleteNum = 100\n"
-                    "$atomsPerSolvent = 5\n\n"
-                    "# 检查输入文件\n"
-                    "if (-not (Test-Path $inputGro)) { Write-Error \"输入文件不存在: $inputGro\"; exit 1 }\n"
-                    "if (-not (Test-Path $topFile)) { Write-Error \"拓扑文件不存在: $topFile\"; exit 1 }\n"
-                    "if (-not (Test-Path $mdpFile)) { Write-Error \"MDP文件不存在: $mdpFile\"; exit 1 }\n\n"
-                    "# 备份原始文件\n"
-                    "Copy-Item $inputGro \"${prefix}_original.gro\" -Force\n"
-                    "Copy-Item $topFile \"${prefix}_original.top\" -Force\n"
-                    "Write-Host \"已备份原始文件\" -ForegroundColor Green\n\n"
-                    "$workGro = \"${prefix}_work.gro\"\n"
-                    "$workTop = \"${prefix}_work.top\"\n"
-                    "$currentGro = \"${prefix}_current.gro\"\n"
-                    "$currentTop = \"${prefix}_current.top\"\n"
-                    "Copy-Item $inputGro $workGro -Force\n"
-                    "Copy-Item $topFile $workTop -Force\n\n"
-                    "for ($i = 1; $i -le $loops; $i++) {\n"
-                    "    Write-Host \"==== SA 第 $i/$loops 轮 ====\" -ForegroundColor Cyan\n"
-                    "\n"
-                    "    $newGro = \"${prefix}_new.gro\"\n"
-                    "    $newTop = \"${prefix}_new.top\"\n"
-                    "\n"
-                    "    Write-Host \"删除 $deleteNum 个CF溶剂分子...\" -ForegroundColor Yellow\n"
-                    "    python delete_solvent.py --solvent CF --delete-num $deleteNum --atoms-per-mol $atomsPerSolvent --loop $i --input $workGro --output $newGro --topology $workTop --topology-output $newTop\n"
-                    "    if ($LASTEXITCODE -ne 0) { Write-Error \"删除溶剂失败\"; exit 1 }\n"
-                    "\n"
-                    "    Move-Item $newGro $workGro -Force\n"
-                    "    Move-Item $newTop $workTop -Force\n"
-                    "\n"
-                    "    Write-Host \"grompp...\" -ForegroundColor Yellow\n"
-                    "    & $GMX grompp -f $mdpFile -c $workGro -p $workTop -o \"${prefix}_$i.tpr\" -maxwarn 200\n"
-                    "    if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "\n"
-                    "    Write-Host \"mdrun (10ps)...\" -ForegroundColor Yellow\n"
-                    "    & $GMX mdrun -v -deffnm \"${prefix}_$i\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "    if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "\n"
-                    "    Copy-Item \"${prefix}_$i.gro\" $currentGro -Force\n"
-                    "    Copy-Item $workTop $currentTop -Force\n"
-                    "    Write-Host \"第 $i 轮完成\" -ForegroundColor Green\n"
-                    "}\n\n"
-                    "Write-Host \"SA溶剂蒸发完成!\" -ForegroundColor Green\n"
-                    "Write-Host \"最终结构: $currentGro\" -ForegroundColor Yellow\n"
-                    "Write-Host \"最终拓扑: $currentTop\" -ForegroundColor Yellow\n"
-                )
-            elif key == "clffcl_evapdio":
-                text = (
-                    "# ClFFCl evapDIO流程模板 (PowerShell)\n"
-                    "# 流程: 删除DIO添加剂 → 运行1ns NPT平衡 → 退火 → MD2\n"
-                    "# 使用文件: ydw-evapDIO.mdp, ydw-ta.mdp, ydw-md_02.mdp\n"
-                    "# 输入: ClFFCl_md.gro, ClFFCl_sa_current.top\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 配置参数\n"
-                    "$inputGro = \"ClFFCl_md.gro\"\n"
-                    "$inputTop = \"ClFFCl_sa_current.top\"\n"
-                    "$mdpFile = \"ydw-evapDIO.mdp\"\n"
-                    "$prefix = \"ClFFCl_evapDIO\"\n\n"
-                    "# 检查输入文件\n"
-                    "if (-not (Test-Path $inputGro)) { Write-Error \"输入文件不存在: $inputGro\"; exit 1 }\n"
-                    "if (-not (Test-Path $inputTop)) { Write-Error \"拓扑文件不存在: $inputTop\"; exit 1 }\n"
-                    "if (-not (Test-Path $mdpFile)) { Write-Error \"MDP文件不存在: $mdpFile\"; exit 1 }\n\n"
-                    "# ==== Step 1: 删除DIO添加剂 ====\n"
-                    "Write-Host \"==== 删除DIO添加剂 ====\" -ForegroundColor Cyan\n"
-                    "$outGro = \"${prefix}_DA.gro\"\n"
-                    "$outTop = \"${prefix}.top\"\n"
-                    "python delete_additive_all.py --additive DIO --atoms-per-mol 6 --input $inputGro --output $outGro --topology $inputTop --topology-output $outTop\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"删除DIO失败\"; exit 1 }\n"
-                    "Write-Host \"DIO删除完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 2: 1ns NPT平衡 ====\n"
-                    "Write-Host \"==== 运行1ns NPT平衡 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f $mdpFile -c \"${prefix}_DA.gro\" -p \"${prefix}.top\" -o \"${prefix}.tpr\" -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm $prefix -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"evapDIO NPT完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 3: 退火过程 ====\n"
-                    "Write-Host \"==== 运行退火 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-ta.mdp -c \"${prefix}.gro\" -p \"${prefix}.top\" -o \"${prefix}_anneal.tpr\" -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"退火 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm \"${prefix}_anneal\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"退火 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"退火完成\" -ForegroundColor Green\n\n"
-                    "# ==== Step 4: MD2 生产模拟 ====\n"
-                    "Write-Host \"==== 运行MD2 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-md_02.mdp -c \"${prefix}_anneal.gro\" -p \"${prefix}.top\" -o \"${prefix}_md2.tpr\" -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"MD2 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm \"${prefix}_md2\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"MD2 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"MD2完成\" -ForegroundColor Green\n\n"
-                    "Write-Host \"evapDIO+退火+MD2流程全部完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "rmsd":
-                text = (
-                    "# RMSD分析脚本模板\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 先做轨迹拟合 (去除平动转动)\n"
-                    "echo '4' | & $GMX trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                    "# 计算RMSD (骨架原子)\n"
-                    "echo '4 4' | & $GMX rms -s md.tpr -f md_fit.xtc -o rmsd.xvg -tu ns\n\n"
-                    "# 计算RMSF\n"
-                    "echo '3' | & $GMX rmsf -s md.tpr -f md_fit.xtc -o rmsf.xvg -res\n\n"
-                    "Write-Host \"RMSD/RMSF分析完成!\"\n"
-                )
-            elif key == "clffcl_md1":
-                text = (
-                    "# ClFFCl MD-1生产模拟流程模板 (PowerShell)\n"
-                    "# 流程: 基于ClFFCl_npt2.gro运行10ns生产模拟\n"
-                    "# 使用文件: ydw-md_01.mdp (10ns)\n"
-                    "# 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# ==== Step 1: MD-1 生产模拟 (10ns) ====\n"
-                    "Write-Host \"==== 运行 MD-1 (10ns) ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f ydw-md_01.mdp -c ClFFCl_npt2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_md.tpr -maxwarn 200\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"MD-1 grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -v -deffnm ClFFCl_md -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"MD-1 mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"MD-1 (10ns)完成\" -ForegroundColor Green\n\n"
-                    "Write-Host \"ClFFCl MD-1生产模拟完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "nvt":
-                text = (
-                    "# NVT恒温平衡脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# NVT 恒温平衡\n"
-                    "Write-Host \"==== 运行 NVT 恒温平衡 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -deffnm nvt -v\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"NVT恒温平衡完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "npt":
-                text = (
-                    "# NPT恒压平衡脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# NPT 恒压平衡\n"
-                    "Write-Host \"==== 运行 NPT 恒压平衡 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f npt.mdp -c nvt.gro -r nvt.gro -p topol.top -o npt.tpr -maxwarn 2\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -deffnm npt -v\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"NPT恒压平衡完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "md":
-                text = (
-                    "# MD生产模拟脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# MD 生产模拟\n"
-                    "Write-Host \"==== 运行 MD 生产模拟 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX grompp -f md.mdp -c npt.gro -r npt.gro -p topol.top -o md.tpr -maxwarn 2\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"grompp 失败\"; exit 1 }\n"
-                    "& $GMX mdrun -deffnm md -v\n"
-                    "if ($LASTEXITCODE -ne 0) { Write-Error \"mdrun 失败\"; exit 1 }\n"
-                    "Write-Host \"MD生产模拟完成!\" -ForegroundColor Green\n"
-                )
-            elif key == "rdf":
-                text = (
-                    "# RDF径向分布函数分析脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 计算径向分布函数 (蛋白-溶剂)\n"
-                    "echo '1 11' | & $GMX rdf -s md.tpr -f md.xtc -o rdf.xvg -ref 'Protein' -sel 'Water'\n\n"
-                    "# 计算配位数\n"
-                    "echo '1 11' | & $GMX rdf -s md.tpr -f md.xtc -o rdf_coord.xvg -ref 'Protein' -sel 'Water' -cn\n\n"
-                    "Write-Host \"RDF分析完成!\"\n"
-                )
-            elif key == "hbond":
-                text = (
-                    "# 氢键分析脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 计算氢键 (蛋白-蛋白)\n"
-                    "echo '1 1' | & $GMX hbond -s md.tpr -f md.xtc -num hbond.xvg\n\n"
-                    "# 计算氢键 (蛋白-溶剂)\n"
-                    "echo '1 11' | & $GMX hbond -s md.tpr -f md.xtc -num hbond_solv.xvg\n\n"
-                    "# 氢键寿命分析\n"
-                    "echo '1 1' | & $GMX hbond -s md.tpr -f md.xtc -ac hbond_analysis.xvg\n\n"
-                    "Write-Host \"氢键分析完成!\"\n"
-                )
-            elif key == "sasa":
-                text = (
-                    "# SASA溶剂可及面积分析脚本模板 (PowerShell)\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 计算整体SASA\n"
-                    "echo '1' | & $GMX sasa -s md.tpr -f md.xtc -o sasa.xvg -surface 1 -output 1\n\n"
-                    "# 按残基计算SASA\n"
-                    "echo '3' | & $GMX sasa -s md.tpr -f md.xtc -o sasa_res.xvg -surface 1 -output 2\n\n"
-                    "# 计算极性/非极性SASA\n"
-                    "echo '1' | & $GMX sasa -s md.tpr -f md.xtc -o sasa_pol.xvg -surface 2 -output 1\n\n"
-                    "Write-Host \"SASA分析完成!\"\n"
-                )
-            elif key == "pca":
-                text = (
-                    "# PCA主成分分析脚本模板 (PowerShell)\n"
-                    "# 注意：需要先做轨迹拟合\n"
-                    "$GMX = \"" + gmx_norm + "\"\n"
-                    "Set-Location $PSScriptRoot\n\n"
-                    "# 步骤1: 轨迹拟合 (去除平动转动)\n"
-                    "Write-Host \"==== 轨迹拟合 ====\" -ForegroundColor Cyan\n"
-                    "echo '4' | & $GMX trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                    "# 步骤2: 计算协方差矩阵\n"
-                    "Write-Host \"==== 计算协方差矩阵 ====\" -ForegroundColor Cyan\n"
-                    "echo '4' | & $GMX covar -s md.tpr -f md_fit.xtc -o eigenvectors.trr -xpm covar.xpm\n\n"
-                    "# 步骤3: 对角化协方差矩阵\n"
-                    "Write-Host \"==== 对角化协方差矩阵 ====\" -ForegroundColor Cyan\n"
-                    "& $GMX anaeig -s md.tpr -f eigenvectors.trr -o eigenvalues.xvg -v eigenvectors.trr -n 10\n\n"
-                    "# 步骤4: 投影到主成分\n"
-                    "Write-Host \"==== 投影到主成分 ====\" -ForegroundColor Cyan\n"
-                    "echo '4' | & $GMX anaeig -s md.tpr -f md_fit.xtc -proj pcaprojection.xvg\n\n"
-                    "# 步骤5: 生成PC1和PC2的结构\n"
-                    "Write-Host \"==== 生成主成分结构 ====\" -ForegroundColor Cyan\n"
-                    "echo '4' | & $GMX anaeig -s md.tpr -f md_fit.xtc -first 1 -last 2 -o pca_pc1_pc2.trr\n\n"
-                    "Write-Host \"PCA分析完成!\" -ForegroundColor Green\n"
-                )
-            else:
-                text = ""
-        
-        elif "Batch" in script_type:
-            gmx_batch = gmx_norm.replace("/", "\\")
-            if key == "em":
-                text = (
-                    "@echo off\n"
-                    "REM 能量最小化脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 1. 生成拓扑 (如果已有topol.top可跳过)\n"
-                    "REM %GMX% pdb2gmx -f protein.pdb -o protein.gro -p topol.top -ff amber99sb-ildn -water tip3p -ignh\n\n"
-                    "REM 2. 构建盒子\n"
-                    "%GMX% editconf -f protein.gro -o protein_box.gro -c -d 1.0 -bt cubic\n\n"
-                    "REM 3. 溶剂化\n"
-                    "%GMX% solvate -cp protein_box.gro -o protein_solv.gro -p topol.top\n\n"
-                    "REM 4. 能量最小化\n"
-                    "%GMX% grompp -f em.mdp -c protein_solv.gro -p topol.top -o em.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm em -v\n"
-                    "if errorlevel 1 goto error\n\n"
-                    "echo 能量最小化完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "full_md":
-                text = (
-                    "@echo off\n"
-                    "REM 完整MD流程脚本模板 (EM -> NVT -> NPT -> MD)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM EM 能量最小化\n"
-                    "echo ==== 运行 EM ====\n"
-                    "%GMX% grompp -f em.mdp -c protein_solv.gro -r protein_solv.gro -p topol.top -o em.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm em -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo EM 完成\n\n"
-                    "REM NVT 恒温平衡\n"
-                    "echo ==== 运行 NVT ====\n"
-                    "%GMX% grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm nvt -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NVT 完成\n\n"
-                    "REM NPT 恒压平衡\n"
-                    "echo ==== 运行 NPT ====\n"
-                    "%GMX% grompp -f npt.mdp -c nvt.gro -r nvt.gro -p topol.top -o npt.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm npt -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NPT 完成\n\n"
-                    "REM MD 生产模拟\n"
-                    "echo ==== 运行 MD ====\n"
-                    "%GMX% grompp -f md.mdp -c npt.gro -r npt.gro -p topol.top -o md.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm md -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo MD 完成\n\n"
-                    "echo 所有MD步骤完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "rmsd":
-                text = (
-                    "@echo off\n"
-                    "REM RMSD分析脚本模板\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 先做轨迹拟合 (去除平动转动)\n"
-                    "echo 4 | %GMX% trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                    "REM 计算RMSD (骨架原子)\n"
-                    "echo 4 4 | %GMX% rms -s md.tpr -f md_fit.xtc -o rmsd.xvg -tu ns\n\n"
-                    "REM 计算RMSF\n"
-                    "echo 3 | %GMX% rmsf -s md.tpr -f md_fit.xtc -o rmsf.xvg -res\n\n"
-                    "echo RMSD/RMSF分析完成!\n"
-                )
-            elif key == "clffcl_em_npt":
-                text = (
-                    "@echo off\n"
-                    "REM ClFFCl EM+NPT流程模板 (Batch)\n"
-                    "REM 流程: EM-1 → EM-2 → NPT-1 → NPT-2\n"
-                    "REM 使用文件: ydw-em_01.mdp (steep), ydw-em_02.mdp (cg), ydw-npt_01.mdp (1ns), ydw-npt_02.mdp (2ns)\n"
-                    "REM 输入: ydw-PM6-ClFFCl.pdb, p4PM6-ClFFCl-mix.top\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM ==== Step 1: 能量最小化 EM-1 (steep) ====\n"
-                    "echo ==== 运行 EM-1 ====\n"
-                    "%GMX% grompp -f ydw-em_01.mdp -c ydw-PM6-ClFFCl.pdb -p p4PM6-ClFFCl-mix.top -o ClFFCl_em1.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm ClFFCl_em1 -nt 6 -pin on -nb gpu -pme cpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo EM-1 完成\n\n"
-                    "REM ==== Step 2: 能量最小化 EM-2 (cg) ====\n"
-                    "echo ==== 运行 EM-2 ====\n"
-                    "%GMX% grompp -f ydw-em_02.mdp -c ClFFCl_em1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_em2.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm ClFFCl_em2 -nt 6 -pin on -nb gpu -pme cpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo EM-2 完成\n\n"
-                    "REM ==== Step 3: NPT 平衡 1 (1ns) ====\n"
-                    "echo ==== 运行 NPT-1 ====\n"
-                    "%GMX% grompp -f ydw-npt_01.mdp -c ClFFCl_em2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt1.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm ClFFCl_npt1 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NPT-1 完成\n\n"
-                    "REM ==== Step 4: NPT 平衡 2 (2ns) ====\n"
-                    "echo ==== 运行 NPT-2 ====\n"
-                    "%GMX% grompp -f ydw-npt_02.mdp -c ClFFCl_npt1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt2.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm ClFFCl_npt2 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NPT-2 完成\n\n"
-                    "echo 所有步骤完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "clffcl_sa":
-                text = (
-                    "@echo off\n"
-                    "REM ClFFCl SA溶剂蒸发流程模板 (Batch)\n"
-                    "REM 流程: 逐步删除CF溶剂分子，每轮运行10ps NPT\n"
-                    "REM 使用文件: ydw-npt-sa.mdp\n"
-                    "REM 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "set inputGro=ClFFCl_npt2.gro\n"
-                    "set topFile=p4PM6-ClFFCl-mix.top\n"
-                    "set mdpFile=ydw-npt-sa.mdp\n"
-                    "set prefix=ClFFCl_sa\n"
-                    "set loops=500\n"
-                    "set deleteNum=100\n"
-                    "set atomsPerSolvent=5\n"
-                    "REM 备份原始文件\n"
-                    "copy /Y %inputGro% %prefix%_original.gro\n"
-                    "copy /Y %topFile% %prefix%_original.top\n"
-                    "echo 已备份原始文件\n\n"
-                    "set workGro=%prefix%_work.gro\n"
-                    "set workTop=%prefix%_work.top\n"
-                    "set currentGro=%prefix%_current.gro\n"
-                    "set currentTop=%prefix%_current.top\n"
-                    "copy /Y %inputGro% %workGro%\n"
-                    "copy /Y %topFile% %workTop%\n\n"
-                    "for /l %%i in (1,1,%loops%) do (\n"
-                    "    echo ==== SA 第 %%i/%loops% 轮 ====\n"
-                    "    set newGro=%prefix%_new.gro\n"
-                    "    set newTop=%prefix%_new.top\n"
-                    "    echo 删除 %deleteNum% 个CF溶剂分子...\n"
-                    "    python delete_solvent.py --solvent CF --delete-num %deleteNum% --atoms-per-mol %atomsPerSolvent% --loop %%i --input %workGro% --output %newGro% --topology %workTop% --topology-output %newTop%\n"
-                    "    if errorlevel 1 goto error\n"
-                    "    move /Y %newGro% %workGro%\n"
-                    "    move /Y %newTop% %workTop%\n"
-                    "    echo grompp...\n"
-                    "    %GMX% grompp -f %mdpFile% -c %workGro% -p %workTop% -o %prefix%_%%i.tpr -maxwarn 200\n"
-                    "    if errorlevel 1 goto error\n"
-                    "    echo mdrun (10ps)...\n"
-                    "    %GMX% mdrun -v -deffnm %prefix%_%%i -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "    if errorlevel 1 goto error\n"
-                    "    copy /Y %prefix%_%%i.gro %currentGro%\n"
-                    "    copy /Y %workTop% %currentTop%\n"
-                    "    echo 第 %%i 轮完成\n"
-                    ")\n\n"
-                    "echo SA溶剂蒸发完成!\n"
-                    "echo 最终结构: %currentGro%\n"
-                    "echo 最终拓扑: %currentTop%\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "clffcl_evapdio":
-                text = (
-                    "@echo off\n"
-                    "REM ClFFCl evapDIO流程模板 (Batch)\n"
-                    "REM 流程: 删除DIO添加剂 → 运行1ns NPT平衡 → 退火 → MD2\n"
-                    "REM 使用文件: ydw-evapDIO.mdp, ydw-ta.mdp, ydw-md_02.mdp\n"
-                    "REM 输入: ClFFCl_md.gro, ClFFCl_sa_current.top\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "set inputGro=ClFFCl_md.gro\n"
-                    "set inputTop=ClFFCl_sa_current.top\n"
-                    "set mdpFile=ydw-evapDIO.mdp\n"
-                    "set prefix=ClFFCl_evapDIO\n\n"
-                    "REM ==== Step 1: 删除DIO添加剂 ====\n"
-                    "echo ==== 删除DIO添加剂 ====\n"
-                    "set outGro=%prefix%_DA.gro\n"
-                    "set outTop=%prefix%.top\n"
-                    "python delete_additive_all.py --additive DIO --atoms-per-mol 6 --input %inputGro% --output %outGro% --topology %inputTop% --topology-output %outTop%\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo DIO删除完成\n\n"
-                    "REM ==== Step 2: 1ns NPT平衡 ====\n"
-                    "echo ==== 运行1ns NPT平衡 ====\n"
-                    "%GMX% grompp -f %mdpFile% -c %prefix%_DA.gro -p %prefix%.top -o %prefix%.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm %prefix% -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo evapDIO NPT完成\n\n"
-                    "REM ==== Step 3: 退火过程 ====\n"
-                    "echo ==== 运行退火 ====\n"
-                    "%GMX% grompp -f ydw-ta.mdp -c %prefix%.gro -p %prefix%.top -o %prefix%_anneal.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm %prefix%_anneal -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo 退火完成\n\n"
-                    "REM ==== Step 4: MD2 生产模拟 ====\n"
-                    "echo ==== 运行MD2 ====\n"
-                    "%GMX% grompp -f ydw-md_02.mdp -c %prefix%_anneal.gro -p %prefix%.top -o %prefix%_md2.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm %prefix%_md2 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo MD2完成\n\n"
-                    "echo evapDIO流程完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "clffcl_md1":
-                text = (
-                    "@echo off\n"
-                    "REM ClFFCl MD-1生产模拟流程模板 (Batch)\n"
-                    "REM 流程: 基于ClFFCl_npt2.gro运行10ns生产模拟\n"
-                    "REM 使用文件: ydw-md_01.mdp (10ns)\n"
-                    "REM 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM ==== Step 1: MD-1 生产模拟 (10ns) ====\n"
-                    "echo ==== 运行 MD-1 (10ns) ====\n"
-                    "%GMX% grompp -f ydw-md_01.mdp -c ClFFCl_npt2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_md.tpr -maxwarn 200\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -v -deffnm ClFFCl_md -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo MD-1 (10ns)完成\n\n"
-                    "echo ClFFCl MD-1生产模拟完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "nvt":
-                text = (
-                    "@echo off\n"
-                    "REM NVT恒温平衡脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM NVT 恒温平衡\n"
-                    "echo ==== 运行 NVT 恒温平衡 ====\n"
-                    "%GMX% grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm nvt -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NVT恒温平衡完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "npt":
-                text = (
-                    "@echo off\n"
-                    "REM NPT恒压平衡脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM NPT 恒压平衡\n"
-                    "echo ==== 运行 NPT 恒压平衡 ====\n"
-                    "%GMX% grompp -f npt.mdp -c nvt.gro -r nvt.gro -p topol.top -o npt.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm npt -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo NPT恒压平衡完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "md":
-                text = (
-                    "@echo off\n"
-                    "REM MD生产模拟脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM MD 生产模拟\n"
-                    "echo ==== 运行 MD 生产模拟 ====\n"
-                    "%GMX% grompp -f md.mdp -c npt.gro -r npt.gro -p topol.top -o md.tpr -maxwarn 2\n"
-                    "if errorlevel 1 goto error\n"
-                    "%GMX% mdrun -deffnm md -v\n"
-                    "if errorlevel 1 goto error\n"
-                    "echo MD生产模拟完成!\n"
-                    "goto end\n"
-                    ":error\n"
-                    "echo 执行失败!\n"
-                    ":end\n"
-                )
-            elif key == "rdf":
-                text = (
-                    "@echo off\n"
-                    "REM RDF径向分布函数分析脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 计算径向分布函数 (蛋白-溶剂)\n"
-                    "echo 1 11 | %GMX% rdf -s md.tpr -f md.xtc -o rdf.xvg -ref 'Protein' -sel 'Water'\n\n"
-                    "REM 计算配位数\n"
-                    "echo 1 11 | %GMX% rdf -s md.tpr -f md.xtc -o rdf_coord.xvg -ref 'Protein' -sel 'Water' -cn\n\n"
-                    "echo RDF分析完成!\n"
-                )
-            elif key == "hbond":
-                text = (
-                    "@echo off\n"
-                    "REM 氢键分析脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 计算氢键 (蛋白-蛋白)\n"
-                    "echo 1 1 | %GMX% hbond -s md.tpr -f md.xtc -num hbond.xvg\n\n"
-                    "REM 计算氢键 (蛋白-溶剂)\n"
-                    "echo 1 11 | %GMX% hbond -s md.tpr -f md.xtc -num hbond_solv.xvg\n\n"
-                    "REM 氢键寿命分析\n"
-                    "echo 1 1 | %GMX% hbond -s md.tpr -f md.xtc -ac hbond_analysis.xvg\n\n"
-                    "echo 氢键分析完成!\n"
-                )
-            elif key == "sasa":
-                text = (
-                    "@echo off\n"
-                    "REM SASA溶剂可及面积分析脚本模板 (Batch)\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 计算整体SASA\n"
-                    "echo 1 | %GMX% sasa -s md.tpr -f md.xtc -o sasa.xvg -surface 1 -output 1\n\n"
-                    "REM 按残基计算SASA\n"
-                    "echo 3 | %GMX% sasa -s md.tpr -f md.xtc -o sasa_res.xvg -surface 1 -output 2\n\n"
-                    "REM 计算极性/非极性SASA\n"
-                    "echo 1 | %GMX% sasa -s md.tpr -f md.xtc -o sasa_pol.xvg -surface 2 -output 1\n\n"
-                    "echo SASA分析完成!\n"
-                )
-            elif key == "pca":
-                text = (
-                    "@echo off\n"
-                    "REM PCA主成分分析脚本模板 (Batch)\n"
-                    "REM 注意：需要先做轨迹拟合\n"
-                    "set GMX=" + gmx_batch + "\n"
-                    "cd /d %~dp0\n\n"
-                    "REM 步骤1: 轨迹拟合 (去除平动转动)\n"
-                    "echo ==== 轨迹拟合 ====\n"
-                    "echo 4 | %GMX% trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                    "REM 步骤2: 计算协方差矩阵\n"
-                    "echo ==== 计算协方差矩阵 ====\n"
-                    "echo 4 | %GMX% covar -s md.tpr -f md_fit.xtc -o eigenvectors.trr -xpm covar.xpm\n\n"
-                    "REM 步骤3: 对角化协方差矩阵\n"
-                    "echo ==== 对角化协方差矩阵 ====\n"
-                    "%GMX% anaeig -s md.tpr -f eigenvectors.trr -o eigenvalues.xvg -v eigenvectors.trr -n 10\n\n"
-                    "REM 步骤4: 投影到主成分\n"
-                    "echo ==== 投影到主成分 ====\n"
-                    "echo 4 | %GMX% anaeig -s md.tpr -f md_fit.xtc -proj pcaprojection.xvg\n\n"
-                    "echo PCA分析完成!\n"
-                )
-            else:
-                text = ""
-        
-        elif "Shell" in script_type:
-            if key == "em":
-                text = "# 能量最小化脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# 1. 生成拓扑 (如果已有topol.top可跳过)\n"
-                text += "# " + gmx_norm + " pdb2gmx -f protein.pdb -o protein.gro -p topol.top -ff amber99sb-ildn -water tip3p -ignh\n\n"
-                text += "# 2. 构建盒子\n"
-                text += gmx_norm + " editconf -f protein.gro -o protein_box.gro -c -d 1.0 -bt cubic\n\n"
-                text += "# 3. 溶剂化\n"
-                text += gmx_norm + " solvate -cp protein_box.gro -o protein_solv.gro -p topol.top\n\n"
-                text += "# 4. 能量最小化\n"
-                text += gmx_norm + " grompp -f em.mdp -c protein_solv.gro -p topol.top -o em.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm em -v\n"
-            elif key == "full_md":
-                text = "# 完整MD流程脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# EM 能量最小化\n"
-                text += gmx_norm + " grompp -f em.mdp -c protein_solv.gro -r protein_solv.gro -p topol.top -o em.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm em -v\n\n"
-                text += "# NVT 恒温平衡\n"
-                text += gmx_norm + " grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm nvt -v\n\n"
-                text += "# NPT 恒压平衡\n"
-                text += gmx_norm + " grompp -f npt.mdp -c nvt.gro -r nvt.gro -p topol.top -o npt.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm npt -v\n\n"
-                text += "# MD 生产模拟\n"
-                text += gmx_norm + " grompp -f md.mdp -c npt.gro -r npt.gro -p topol.top -o md.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm md -v\n"
-            elif key == "clffcl_em_npt":
-                text = "# ClFFCl EM+NPT流程模板 (Shell命令)\n"
-                text += "# 流程: EM-1 → EM-2 → NPT-1 → NPT-2\n"
-                text += "# 使用文件: ydw-em_01.mdp (steep), ydw-em_02.mdp (cg), ydw-npt_01.mdp (1ns), ydw-npt_02.mdp (2ns)\n"
-                text += "# 输入: ydw-PM6-ClFFCl.pdb, p4PM6-ClFFCl-mix.top\n\n"
-                text += "# ==== Step 1: 能量最小化 EM-1 (steep) ====\n"
-                text += gmx_norm + " grompp -f ydw-em_01.mdp -c ydw-PM6-ClFFCl.pdb -p p4PM6-ClFFCl-mix.top -o ClFFCl_em1.tpr -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm ClFFCl_em1 -nt 6 -pin on -nb gpu -pme cpu\n\n"
-
-                text += "# ==== Step 2: 能量最小化 EM-2 (cg) ====\n"
-                text += gmx_norm + " grompp -f ydw-em_02.mdp -c ClFFCl_em1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_em2.tpr -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm ClFFCl_em2 -nt 6 -pin on -nb gpu -pme cpu\n\n"
-
-                text += "# ==== Step 3: NPT 平衡 1 (1ns) ====\n"
-                text += gmx_norm + " grompp -f ydw-npt_01.mdp -c ClFFCl_em2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt1.tpr -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm ClFFCl_npt1 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n\n"
-                text += "# ==== Step 4: NPT 平衡 2 (2ns) ====\n"
-                text += gmx_norm + " grompp -f ydw-npt_02.mdp -c ClFFCl_npt1.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_npt2.tpr -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm ClFFCl_npt2 -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n\n"
-                text += "echo '所有步骤完成!'\n"
-            elif key == "clffcl_sa":
-                text = "# ClFFCl SA溶剂蒸发流程模板 (Shell命令)\n"
-                text += "# 流程: 逐步删除CF溶剂分子，每轮运行10ps NPT\n"
-                text += "# 使用文件: ydw-npt-sa.mdp\n"
-                text += "# 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n\n"
-                text += "inputGro=\"ClFFCl_npt2.gro\"\n"
-                text += "topFile=\"p4PM6-ClFFCl-mix.top\"\n"
-                text += "mdpFile=\"ydw-npt-sa.mdp\"\n"
-                text += "prefix=\"ClFFCl_sa\"\n"
-                text += "loops=500\n"
-                text += "deleteNum=100\n"
-                text += "atomsPerSolvent=5\n"
-                text += "# 备份原始文件\n"
-                text += "cp \"$inputGro\" \"${prefix}_original.gro\"\n"
-                text += "cp \"$topFile\" \"${prefix}_original.top\"\n"
-                text += "echo \"已备份原始文件\"\n\n"
-                text += "workGro=\"${prefix}_work.gro\"\n"
-                text += "workTop=\"${prefix}_work.top\"\n"
-                text += "currentGro=\"${prefix}_current.gro\"\n"
-                text += "currentTop=\"${prefix}_current.top\"\n"
-                text += "cp \"$inputGro\" \"$workGro\"\n"
-                text += "cp \"$topFile\" \"$workTop\"\n\n"
-                text += "for ((i=1; i<=loops; i++)); do\n"
-                text += "  echo \"==== SA 第 $i/$loops 轮 ====\"\n"
-                text += "  newGro=\"${prefix}_new.gro\"\n"
-                text += "  newTop=\"${prefix}_new.top\"\n"
-                text += "  echo \"删除 $deleteNum 个CF溶剂分子...\"\n"
-                text += "  python delete_solvent.py --solvent CF --delete-num \"$deleteNum\" --atoms-per-mol \"$atomsPerSolvent\" --loop \"$i\" --input \"$workGro\" --output \"$newGro\" --topology \"$workTop\" --topology-output \"$newTop\"\n"
-                text += "  if [ $? -ne 0 ]; then echo \"删除溶剂失败\"; exit 1; fi\n"
-                text += "  mv \"$newGro\" \"$workGro\"\n"
-                text += "  mv \"$newTop\" \"$workTop\"\n"
-                text += "  echo \"grompp...\"\n"
-                text += "  " + gmx_norm + " grompp -f \"$mdpFile\" -c \"$workGro\" -p \"$workTop\" -o \"${prefix}_$i.tpr\" -maxwarn 200\n"
-                text += "  if [ $? -ne 0 ]; then echo \"grompp失败\"; exit 1; fi\n"
-                text += "  echo \"mdrun (10ps)...\"\n"
-                text += "  " + gmx_norm + " mdrun -v -deffnm \"${prefix}_$i\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                text += "  if [ $? -ne 0 ]; then echo \"mdrun失败\"; exit 1; fi\n"
-                text += "  cp \"${prefix}_$i.gro\" \"$currentGro\"\n"
-                text += "  cp \"$workTop\" \"$currentTop\"\n"
-                text += "  echo \"第 $i 轮完成\"\n"
-                text += "done\n\n"
-                text += "echo 'SA溶剂蒸发完成!'\n"
-                text += "echo \"最终结构: $currentGro\"\n"
-                text += "echo \"最终拓扑: $currentTop\"\n"
-            elif key == "clffcl_evapdio":
-                text = "# ClFFCl evapDIO流程模板 (Shell命令)\n"
-                text += "# 流程: 删除DIO添加剂 → 运行1ns NPT平衡 → 退火 → MD2\n"
-                text += "# 使用文件: ydw-evapDIO.mdp, ydw-ta.mdp, ydw-md_02.mdp\n"
-                text += "# 输入: ClFFCl_md.gro, ClFFCl_sa_current.top\n\n"
-                text += "inputGro=\"ClFFCl_md.gro\"\n"
-                text += "inputTop=\"ClFFCl_sa_current.top\"\n"
-                text += "mdpFile=\"ydw-evapDIO.mdp\"\n"
-                text += "prefix=\"ClFFCl_evapDIO\"\n\n"
-                text += "# ==== Step 1: 删除DIO添加剂 ====\n"
-                text += "echo \"==== 删除DIO添加剂 ====\"\n"
-                text += "outGro=\"${prefix}_DA.gro\"\n"
-                text += "outTop=\"${prefix}.top\"\n"
-                text += "python delete_additive_all.py --additive DIO --atoms-per-mol 6 --input \"$inputGro\" --output \"$outGro\" --topology \"$inputTop\" --topology-output \"$outTop\"\n"
-                text += "echo 'DIO删除完成'\n\n"
-                text += "# ==== Step 2: 1ns NPT平衡 ====\n"
-                text += "echo \"==== 运行1ns NPT平衡 ====\"\n"
-                text += gmx_norm + " grompp -f \"$mdpFile\" -c \"${prefix}_DA.gro\" -p \"${prefix}.top\" -o \"${prefix}.tpr\" -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm \"$prefix\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                text += "echo 'evapDIO NPT完成'\n\n"
-                text += "# ==== Step 3: 退火过程 ====\n"
-                text += "echo \"==== 运行退火 ====\"\n"
-                text += gmx_norm + " grompp -f ydw-ta.mdp -c \"${prefix}.gro\" -p \"${prefix}.top\" -o \"${prefix}_anneal.tpr\" -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm \"${prefix}_anneal\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                text += "echo '退火完成'\n\n"
-                text += "# ==== Step 4: MD2 生产模拟 ====\n"
-                text += "echo \"==== 运行MD2 ====\"\n"
-                text += gmx_norm + " grompp -f ydw-md_02.mdp -c \"${prefix}_anneal.gro\" -p \"${prefix}.top\" -o \"${prefix}_md2.tpr\" -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm \"${prefix}_md2\" -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                text += "echo 'MD2完成'\n\n"
-                text += "echo 'evapDIO+退火+MD2流程全部完成!'\n"
-            elif key == "rmsd":
-                text = "# RMSD分析脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# 先做轨迹拟合 (去除平动转动)\n"
-                text += "echo 4 | " + gmx_norm + " trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                text += "# 计算RMSD (骨架原子)\n"
-                text += "echo 4 4 | " + gmx_norm + " rms -s md.tpr -f md_fit.xtc -o rmsd.xvg -tu ns\n\n"
-                text += "# 计算RMSF\n"
-                text += "echo 3 | " + gmx_norm + " rmsf -s md.tpr -f md_fit.xtc -o rmsf.xvg -res\n"
-            elif key == "clffcl_md1":
-                text = "# ClFFCl MD-1生产模拟流程模板 (Shell命令)\n"
-                text += "# 流程: 基于ClFFCl_npt2.gro运行10ns生产模拟\n"
-                text += "# 使用文件: ydw-md_01.mdp (10ns)\n"
-                text += "# 输入: ClFFCl_npt2.gro, p4PM6-ClFFCl-mix.top\n\n"
-                text += "# ==== Step 1: MD-1 生产模拟 (10ns) ====\n"
-                text += "echo \"==== 运行 MD-1 (10ns) ====\"\n"
-                text += gmx_norm + " grompp -f ydw-md_01.mdp -c ClFFCl_npt2.gro -p p4PM6-ClFFCl-mix.top -o ClFFCl_md.tpr -maxwarn 200\n"
-                text += gmx_norm + " mdrun -v -deffnm ClFFCl_md -nt 6 -pin on -gpu_id 0 -nb gpu -pme gpu -bonded gpu -update gpu\n"
-                text += "echo 'MD-1 (10ns)完成'\n\n"
-                text += "echo 'ClFFCl MD-1生产模拟完成!'\n"
-            elif key == "nvt":
-                text = "# NVT恒温平衡脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# NVT 恒温平衡\n"
-                text += "echo \"==== 运行 NVT 恒温平衡 ====\"\n"
-                text += gmx_norm + " grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm nvt -v\n"
-                text += "echo 'NVT恒温平衡完成!'\n"
-            elif key == "npt":
-                text = "# NPT恒压平衡脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# NPT 恒压平衡\n"
-                text += "echo \"==== 运行 NPT 恒压平衡 ====\"\n"
-                text += gmx_norm + " grompp -f npt.mdp -c nvt.gro -r nvt.gro -p topol.top -o npt.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm npt -v\n"
-                text += "echo 'NPT恒压平衡完成!'\n"
-            elif key == "md":
-                text = "# MD生产模拟脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# MD 生产模拟\n"
-                text += "echo \"==== 运行 MD 生产模拟 ====\"\n"
-                text += gmx_norm + " grompp -f md.mdp -c npt.gro -r npt.gro -p topol.top -o md.tpr -maxwarn 2\n"
-                text += gmx_norm + " mdrun -deffnm md -v\n"
-                text += "echo 'MD生产模拟完成!'\n"
-            elif key == "rdf":
-                text = "# RDF径向分布函数分析脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# 计算径向分布函数 (蛋白-溶剂)\n"
-                text += "echo 1 11 | " + gmx_norm + " rdf -s md.tpr -f md.xtc -o rdf.xvg -ref 'Protein' -sel 'Water'\n\n"
-                text += "# 计算配位数\n"
-                text += "echo 1 11 | " + gmx_norm + " rdf -s md.tpr -f md.xtc -o rdf_coord.xvg -ref 'Protein' -sel 'Water' -cn\n\n"
-                text += "echo 'RDF分析完成!'\n"
-            elif key == "hbond":
-                text = "# 氢键分析脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# 计算氢键 (蛋白-蛋白)\n"
-                text += "echo 1 1 | " + gmx_norm + " hbond -s md.tpr -f md.xtc -num hbond.xvg\n\n"
-                text += "# 计算氢键 (蛋白-溶剂)\n"
-                text += "echo 1 11 | " + gmx_norm + " hbond -s md.tpr -f md.xtc -num hbond_solv.xvg\n\n"
-                text += "# 氢键寿命分析\n"
-                text += "echo 1 1 | " + gmx_norm + " hbond -s md.tpr -f md.xtc -ac hbond_analysis.xvg\n\n"
-                text += "echo '氢键分析完成!'\n"
-            elif key == "sasa":
-                text = "# SASA溶剂可及面积分析脚本模板 (Shell命令)\n"
-                text += "# 一行一条命令，依次执行\n\n"
-                text += "# 计算整体SASA\n"
-                text += "echo 1 | " + gmx_norm + " sasa -s md.tpr -f md.xtc -o sasa.xvg -surface 1 -output 1\n\n"
-                text += "# 按残基计算SASA\n"
-                text += "echo 3 | " + gmx_norm + " sasa -s md.tpr -f md.xtc -o sasa_res.xvg -surface 1 -output 2\n\n"
-                text += "# 计算极性/非极性SASA\n"
-                text += "echo 1 | " + gmx_norm + " sasa -s md.tpr -f md.xtc -o sasa_pol.xvg -surface 2 -output 1\n\n"
-                text += "echo 'SASA分析完成!'\n"
-            elif key == "pca":
-                text = "# PCA主成分分析脚本模板 (Shell命令)\n"
-                text += "# 注意：需要先做轨迹拟合\n\n"
-                text += "# 步骤1: 轨迹拟合 (去除平动转动)\n"
-                text += "echo \"==== 轨迹拟合 ====\"\n"
-                text += "echo 4 | " + gmx_norm + " trjconv -s md.tpr -f md.xtc -o md_fit.xtc -fit rot+trans\n\n"
-                text += "# 步骤2: 计算协方差矩阵\n"
-                text += "echo \"==== 计算协方差矩阵 ====\"\n"
-                text += "echo 4 | " + gmx_norm + " covar -s md.tpr -f md_fit.xtc -o eigenvectors.trr -xpm covar.xpm\n\n"
-                text += "# 步骤3: 对角化协方差矩阵\n"
-                text += "echo \"==== 对角化协方差矩阵 ====\"\n"
-                text += gmx_norm + " anaeig -s md.tpr -f eigenvectors.trr -o eigenvalues.xvg -v eigenvectors.trr -n 10\n\n"
-                text += "# 步骤4: 投影到主成分\n"
-                text += "echo \"==== 投影到主成分 ====\"\n"
-                text += "echo 4 | " + gmx_norm + " anaeig -s md.tpr -f md_fit.xtc -proj pcaprojection.xvg\n\n"
-                text += "# 步骤5: 生成PC1和PC2的结构\n"
-                text += "echo \"==== 生成主成分结构 ====\"\n"
-                text += "echo 4 | " + gmx_norm + " anaeig -s md.tpr -f md_fit.xtc -first 1 -last 2 -o pca_pc1_pc2.trr\n\n"
-                text += "echo 'PCA分析完成!'\n"
-            else:
-                text = ""
-        
-        else:
-            text = ""
-        
+        text = get_script_template(script_type, key, gmx_norm)
         self.script_edit.setPlainText(text)
 
     def _save_script(self):
