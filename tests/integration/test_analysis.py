@@ -7,6 +7,7 @@
 import os
 import sys
 import subprocess
+from pathlib import Path
 import numpy as np
 import pytest
 
@@ -152,7 +153,19 @@ class TestRDFAnalysis:
             ("All_s4_BDT", "All_BTP"),
         ]
 
-        ref_dir = project_root.parent / "Calculation" / "Gromacs_simulation" / "ClFFCl" / "MD-2" / "Analysis"
+        # 参考数据目录（用户从 D:/YDW/Calculation 迁移到 E:/YDW/Calculation）
+        ref_candidates = [
+            project_root.parent / "Calculation",          # D:/YDW/Calculation
+            Path("E:/YDW/Calculation"),                  # E:/YDW/Calculation
+        ]
+        ref_dir = None
+        for cand in ref_candidates:
+            p = cand / "Gromacs_simulation" / "ClFFCl" / "MD-2" / "Analysis"
+            if (p / "fragment_RDF").is_dir():
+                ref_dir = p
+                break
+        if ref_dir is None:
+            pytest.skip("参考数据目录不存在（Gromacs_simulation/ClFFCl/MD-2/Analysis）")
         results = {}
 
         for donor, acceptor in test_pairs:

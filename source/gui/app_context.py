@@ -35,7 +35,8 @@ def get_version_config():
     if getattr(sys, 'frozen', False):
         base = os.path.dirname(sys.executable)
     else:
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # __file__ = source/gui/app_context.py，三级上溯到项目根（version.config 所在）
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     config_path = os.path.join(base, "version.config")
     try:
         with open(config_path, "r", encoding="utf-8") as f:
