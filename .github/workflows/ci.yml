@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest PyQt5 pyunpack
+          pip install pytest PyQt5 pyunpack psutil numpy
 
       - name: Run unit tests
         run: python -m pytest tests/unit -v --tb=short

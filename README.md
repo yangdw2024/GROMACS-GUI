@@ -117,7 +117,7 @@ GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形�
 ## 项目结构
 
 ```
-Trae_Gromacs/
+GROMACS-GUI/
 ├── source/                          # 源代码
 │   ├── main.py                      # 程序入口
 │   ├── gromacs_gui_v4.py            # 兼容入口（转调 gui 包）
@@ -196,8 +196,8 @@ pip install -r requirements.txt
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yangdw2024/Trae_Gromacs.git
-cd Trae_Gromacs
+git clone https://github.com/yangdw2024/GROMACS-GUI.git
+cd GROMACS-GUI
 
 # 安装依赖
 pip install -r requirements.txt
@@ -213,9 +213,9 @@ python source/gromacs_gui_v4.py
 
 **重要：请勿下载 GitHub 自动生成的 "Source code (zip)"，那只是源码（不到 1MB），无法直接运行！**
 
-请从 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0) 下载完整的一体化程序包：
+请从 [Releases 页面](https://github.com/yangdw2024/GROMACS-GUI/releases/tag/v4.3.0) 下载完整的一体化程序包：
 
-1. 打开 [Releases 页面](https://github.com/yangdw2024/Trae_Gromacs/releases/tag/v4.3.0)
+1. 打开 [Releases 页面](https://github.com/yangdw2024/GROMACS-GUI/releases/tag/v4.3.0)
 2. 下载 **GROMACS\_GUI\_v4.3.0\_Full\_Package.zip**（1.37 GB）—— 这是一体化完整包（GUI + GROMACS 引擎）
 3. 解压到任意目录
 4. 双击 `start.bat` 启动 —— **直接可用，无需任何额外安装！**
@@ -236,8 +236,8 @@ python source/gromacs_gui_v4.py
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yangdw2024/Trae_Gromacs.git
-cd Trae_Gromacs
+git clone https://github.com/yangdw2024/GROMACS-GUI.git
+cd GROMACS-GUI
 
 # 安装依赖
 pip install PyQt5 numpy psutil

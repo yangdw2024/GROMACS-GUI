@@ -66,6 +66,7 @@ cuda-keyring*.deb*
 # --- 构建生成的文件 ---
 source/version_info.json
 source/gromacs_gui_config.json
+source/gui/gromacs_gui_config.json
 
 # --- 大型二进制资源 (PDF教程不纳入版本控制) ---
 resources/*.pdf
