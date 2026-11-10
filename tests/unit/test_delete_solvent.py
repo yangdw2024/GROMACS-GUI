@@ -361,7 +361,7 @@ def test_shell_and_ps1_scripts_defensive_guards():
     fclfcl_text = fclfcl_sh.decode("utf-8")
     clffcl_text = clffcl_sh.decode("utf-8")
 
-    # 2. Corrected Shell 脚本必须具备逐轮结构继承、分轮拓扑保存、GRO完整性校验与状态记录
+    # 2. Corrected Shell 脚本必须具备逐轮结构继承、分轮拓扑保存、同轮CPT恢复不重删、GRO完整性校验与状态记录
     for text in (fclfcl_text, clffcl_text):
         assert '--atoms-per-mol "$ATOMS_PER_SOLVENT"' in text
         assert "read_top_solvent_count()" in text
@@ -372,6 +372,7 @@ def test_shell_and_ps1_scripts_defensive_guards():
         assert "--topology \"$LOOP_IN_TOP\"" in text
         assert 'cp "${OUTBASE}.gro" "$WORK_GRO"' in text
         assert 'mv "$NEW_TOP" "$LOOP_TOP"' in text
+        assert 'IN_ROUND_CPT_ARGS=(-cpi "${OUTBASE}.cpt" -append)' in text
         assert '"workflow_version": "Corrected"' in text
         assert "_sa_state.json" in text
 

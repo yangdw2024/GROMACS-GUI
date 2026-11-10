@@ -38,7 +38,15 @@ TOP_FILE="p4PM6-ClFFCl-mix.top"
 MDP_FILE="ydw-npt-sa.mdp"
 
 GMX="${GMX:-gmx}"
-PYTHON="${PYTHON:-$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)}"
+if [ -z "${PYTHON:-}" ]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import sys" >/dev/null 2>&1; then
+        PYTHON="python3"
+    elif command -v python >/dev/null 2>&1 && python -c "import sys" >/dev/null 2>&1; then
+        PYTHON="python"
+    else
+        PYTHON="python3"
+    fi
+fi
 MAXWARN="${MAXWARN:-200}"
 NT="${NT:-16}"
 GPU_ID="${GPU_ID:-0}"
@@ -348,47 +356,68 @@ while [ "$loop" -le "$END_LOOP" ]; do
     LOOP_TOP="${OUTBASE}.top"
 
     echo ""
-    echo "[循环 $loop/$END_LOOP] 输入结构: $LOOP_IN_GRO | 删除 $CURRENT_DELETE_NUM 个 $SOLVENT_NAME..." | tee -a "$LOG_FILE"
-
-    # 调用 delete_solvent.py 从上一轮 NPT 结束结构 LOOP_IN_GRO 删除溶剂
-    echo "正在运行 delete_solvent.py..." | tee -a "$LOG_FILE"
-    "$PYTHON" delete_solvent.py \
-        --solvent "$SOLVENT_NAME" \
-        --delete-num "$CURRENT_DELETE_NUM" \
-        --atoms-per-mol "$ATOMS_PER_SOLVENT" \
-        --loop "$loop" \
-        --input "$LOOP_IN_GRO" \
-        --output "${PREFIX}_new.gro" \
-        --topology "$LOOP_IN_TOP" \
-        --topology-output "$NEW_TOP" \
-        >> "$LOG_FILE" 2>&1 || {
-            echo "错误: delete_solvent.py 在循环 $loop 中失败。" | tee -a "$LOG_FILE"
+    # 判断是否为“同一轮中断后从本轮 checkpoint 恢复”（路径 3）：
+    # 条件：loop == START_LOOP 且已存在本轮 .tpr 与 .cpt，且本轮尚未生成完整的完成态 .gro
+    IN_ROUND_CPT_ARGS=()
+    if [ "$loop" -eq "$START_LOOP" ] && [ -f "${OUTBASE}.tpr" ] && [ -f "${OUTBASE}.cpt" ] && { [ ! -f "${OUTBASE}.gro" ] || ! verify_gro_complete "${OUTBASE}.gro"; }; then
+        if [ ! -f "$NEW_TOP" ]; then
+            if [ -f "$LOOP_TOP" ] && [ "$(read_top_solvent_count "$LOOP_TOP")" = "$((CURRENT_SOLVENT_COUNT - CURRENT_DELETE_NUM))" ]; then
+                cp "$LOOP_TOP" "$NEW_TOP"
+            else
+                echo "错误: 检测到本轮中断检查点 ${OUTBASE}.cpt，但缺少配对的本轮待提交拓扑 $NEW_TOP！" | tee -a "$LOG_FILE"
+                exit 1
+            fi
+        fi
+        PENDING_TOP_COUNT=$(read_top_solvent_count "$NEW_TOP")
+        if [ "$PENDING_TOP_COUNT" != "$((CURRENT_SOLVENT_COUNT - CURRENT_DELETE_NUM))" ]; then
+            echo "错误: 本轮待提交拓扑 $NEW_TOP 分子数 ($PENDING_TOP_COUNT) 与预期 ($((CURRENT_SOLVENT_COUNT - CURRENT_DELETE_NUM))) 不符！" | tee -a "$LOG_FILE"
             exit 1
-        }
+        fi
+        echo "[循环 $loop/$END_LOOP] 检测到本轮未完成检查点 ${OUTBASE}.cpt 与 ${OUTBASE}.tpr，保留已有 TPR/CPT 直接恢复本轮 mdrun（跳过重复删溶剂与 grompp）..." | tee -a "$LOG_FILE"
+        IN_ROUND_CPT_ARGS=(-cpi "${OUTBASE}.cpt" -append)
+    else
+        echo "[循环 $loop/$END_LOOP] 输入结构: $LOOP_IN_GRO | 删除 $CURRENT_DELETE_NUM 个 $SOLVENT_NAME..." | tee -a "$LOG_FILE"
 
-    # 更新本轮 grompp 使用的工作结构文件
-    mv "${PREFIX}_new.gro" "$WORK_GRO"
+        # 调用 delete_solvent.py 从上一轮 NPT 结束结构 LOOP_IN_GRO 删除溶剂
+        echo "正在运行 delete_solvent.py..." | tee -a "$LOG_FILE"
+        "$PYTHON" delete_solvent.py \
+            --solvent "$SOLVENT_NAME" \
+            --delete-num "$CURRENT_DELETE_NUM" \
+            --atoms-per-mol "$ATOMS_PER_SOLVENT" \
+            --loop "$loop" \
+            --input "$LOOP_IN_GRO" \
+            --output "${PREFIX}_new.gro" \
+            --topology "$LOOP_IN_TOP" \
+            --topology-output "$NEW_TOP" \
+            >> "$LOG_FILE" 2>&1 || {
+                echo "错误: delete_solvent.py 在循环 $loop 中失败。" | tee -a "$LOG_FILE"
+                exit 1
+            }
 
-    # 清理本轮可能残留的旧输出与不匹配的 checkpoint（禁止跨轮复用原子数不同的 cpt）
-    rm -f "${OUTBASE}.gro" "${OUTBASE}.tpr" "${OUTBASE}.cpt" "${OUTBASE}_prev.cpt"
+        # 更新本轮 grompp 使用的工作结构文件
+        mv "${PREFIX}_new.gro" "$WORK_GRO"
 
-    echo "正在运行 grompp..." | tee -a "$LOG_FILE"
-    "$GMX" grompp \
-        -f "$MDP_FILE" \
-        -c "$WORK_GRO" \
-        -p "$NEW_TOP" \
-        -o "${OUTBASE}.tpr" \
-        -maxwarn "$MAXWARN" \
-        >> "$LOG_FILE" 2>&1 || {
-            echo "错误: grompp 在循环 $loop 中失败。" | tee -a "$LOG_FILE"
-            exit 1
-        }
+        # 新一轮计算开始前，清理同名旧输出与旧 checkpoint（禁止跨删除步骤复用原子数不匹配的 cpt）
+        rm -f "${OUTBASE}.gro" "${OUTBASE}.tpr" "${OUTBASE}.cpt" "${OUTBASE}_prev.cpt"
 
-    # 新一轮删除分子后原子数已改变，直接从本轮新 tpr 启动 mdrun（不传上一轮 -cpi）
+        echo "正在运行 grompp..." | tee -a "$LOG_FILE"
+        "$GMX" grompp \
+            -f "$MDP_FILE" \
+            -c "$WORK_GRO" \
+            -p "$NEW_TOP" \
+            -o "${OUTBASE}.tpr" \
+            -maxwarn "$MAXWARN" \
+            >> "$LOG_FILE" 2>&1 || {
+                echo "错误: grompp 在循环 $loop 中失败。" | tee -a "$LOG_FILE"
+                exit 1
+            }
+    fi
+
     echo "正在运行 mdrun (10ps NPT)..." | tee -a "$LOG_FILE"
     if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
         "$GMX" mdrun \
             -v -deffnm "$OUTBASE" \
+            "${IN_ROUND_CPT_ARGS[@]}" \
             -nt "$NT" -pin on -pinstride 1 \
             -bonded gpu -update gpu -gpu_id "$GPU_ID" \
             >> "$LOG_FILE" 2>&1 || {
@@ -398,6 +427,7 @@ while [ "$loop" -le "$END_LOOP" ]; do
     else
         "$GMX" mdrun \
             -v -deffnm "$OUTBASE" \
+            "${IN_ROUND_CPT_ARGS[@]}" \
             -nt "$NT" -pin on -pinstride 1 \
             >> "$LOG_FILE" 2>&1 || {
                 echo "错误: mdrun 在循环 $loop 中失败。" | tee -a "$LOG_FILE"

@@ -277,8 +277,11 @@ def test_evap_loop_additive(tmp_path):
 
 
 def test_evap_loop_restart_found(tmp_path):
-    # 1. 本轮存在同轮 checkpoint (evap_3.cpt)，当从本轮续跑 (start_loop=3) 时，允许恢复本轮
-    (tmp_path / "evap_3.cpt").touch()
+    # 1. 同轮中断恢复：当本轮同时存在 evap_3.cpt 与 evap_3.tpr（且尚未生成完成态 evap_3.gro）时，
+    #    必须跳过 delete_solvent 与 grompp，直接以 -cpi evap_3.cpt -append 恢复 mdrun，绝不重复删除溶剂！
+    (tmp_path / "evap_3.cpt").write_bytes(b"CPT_DATA")
+    (tmp_path / "evap_3.tpr").write_bytes(b"TPR_DATA")
+    (tmp_path / "evap_3_pending.top").write_text("[ molecules ]\nSOL 90\n", encoding="utf-8")
     cmds, restart = build_evap_loop_commands(
         loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
         delete_script="del.py", resname="SOL", delete_num=10,
@@ -289,10 +292,16 @@ def test_evap_loop_restart_found(tmp_path):
         restart_check=True, start_loop=3, mode="solvent"
     )
     assert restart == "evap_3.cpt"
-    assert "-cpi" in cmds[4] and "evap_3.cpt" in cmds[4]
+    flat_cmds = [" ".join(c) for c in cmds]
+    assert not any("del.py" in c for c in flat_cmds), "Same-round CPT resume must NOT re-run delete_solvent!"
+    assert not any("grompp" in c for c in flat_cmds), "Same-round CPT resume must NOT re-run grompp!"
+    mdrun_cmds = [c for c in cmds if "mdrun" in c]
+    assert len(mdrun_cmds) == 1
+    assert "-cpi" in mdrun_cmds[0] and "evap_3.cpt" in mdrun_cmds[0]
+    assert "-append" in mdrun_cmds[0]
 
-    # 2. 禁止跨轮复用：上一轮的 checkpoint (evap_2.cpt) 绝不能作为新一轮 (loop_idx=3) 的 -cpi
-    (tmp_path / "evap_2.cpt").touch()
+    # 2. 禁止跨轮复用：上一轮的 checkpoint (evap_2.cpt) 绝不能作为新一轮 (loop_idx=3, start_loop=1) 的 -cpi
+    (tmp_path / "evap_2.cpt").write_bytes(b"CPT2")
     cmds_cross, restart_cross = build_evap_loop_commands(
         loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
         delete_script="del.py", resname="SOL", delete_num=10,
@@ -303,7 +312,54 @@ def test_evap_loop_restart_found(tmp_path):
         restart_check=True, start_loop=1, mode="solvent"
     )
     assert restart_cross is None
-    assert "-cpi" not in cmds_cross[4]
+    assert any("del.py" in " ".join(c) for c in cmds_cross)
+    assert any("grompp" in " ".join(c) for c in cmds_cross)
+    mdrun_cross = [c for c in cmds_cross if "mdrun" in c][0]
+    assert "-cpi" not in mdrun_cross
+
+
+def test_detect_existing_loops_ignores_incomplete_or_unpaired_rounds(tmp_path):
+    # 完整合法的 2 原子 GRO 辅助构造
+    valid_gro = (
+        "Valid GRO\n2\n"
+        "    1SOL     OW    1   1.000   1.000   1.000\n"
+        "    1SOL    HW1    2   1.100   1.000   1.000\n"
+        "   3.00000   3.00000   3.00000\n"
+    )
+    # 第 1、2 轮：完整 GRO + 配对 TOP -> 应识别为已完成
+    for i in [1, 2]:
+        (tmp_path / f"evap_{i}.gro").write_text(valid_gro, encoding="utf-8")
+        (tmp_path / f"evap_{i}.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+
+    # 第 3 轮：仅有空文件或截断损坏的 GRO（模拟 mdrun 崩溃未写完） -> 绝不能误判为已完成！
+    (tmp_path / "evap_3.gro").write_text("Truncated\n2\n    1SOL     OW    1   1.000   1.000   1.000\n", encoding="utf-8")
+    (tmp_path / "evap_3.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+
+    # 第 4 轮：GRO 完整，但既无 evap_4.top 也无任何可用拓扑 -> 绝不能误判为已完成！
+    (tmp_path / "evap_4.gro").write_text(valid_gro, encoding="utf-8")
+    (tmp_path / "evap_4_pending.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+
+    start, mx = detect_existing_loops(str(tmp_path), "evap")
+    assert mx == 2, f"Expected max completed loop 2, but got {mx}"
+    assert start == 3, f"Expected next start_loop 3, but got {start}"
+
+
+def test_setup_evap_work_files_prefers_exact_prev_loop_top(tmp_path):
+    wd = str(tmp_path)
+    valid_gro = (
+        "Valid GRO\n2\n"
+        "    1SOL     OW    1   1.000   1.000   1.000\n"
+        "    1SOL    HW1    2   1.100   1.000   1.000\n"
+        "   3.00000   3.00000   3.00000\n"
+    )
+    (tmp_path / "evap_2.gro").write_text(valid_gro, encoding="utf-8")
+    (tmp_path / "evap_2.top").write_text("top_round_2_exact", encoding="utf-8")
+    (tmp_path / "evap_current.top").write_text("top_polluted_by_later_round", encoding="utf-8")
+
+    info = setup_evap_work_files(wd, "input.gro", "top.top", "evap", 3, 0)
+    assert "error" not in info
+    assert info["prev_top_basename"] == "evap_2.top"
+    assert (tmp_path / "evap_work.top").read_text(encoding="utf-8") == "top_round_2_exact"
 
 
 # =============================================================================
