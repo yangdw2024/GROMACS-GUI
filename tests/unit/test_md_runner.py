@@ -244,13 +244,18 @@ def test_evap_loop_solvent(tmp_path):
         mdrun_extra=["-ntmpi", "1"], wd=str(tmp_path),
         restart_check=False, start_loop=1, mode="solvent"
     )
-    assert len(cmds) == 7
+    # 9 个命令：删除分子、更新work_gro/top、grompp、mdrun、更新work_gro、更新current_gro、保存分轮top、更新current_top
+    assert len(cmds) == 9
     assert "--solvent" in cmds[0] and "SOL" in cmds[0]
     assert "--delete-num" in cmds[0] and "10" in cmds[0]
     assert "--loop" in cmds[0] and "3" in cmds[0]
     assert "grompp" in cmds[3]
     assert "mdrun" in cmds[4]
     assert "evap_3" in " ".join(cmds[4])
+    # 验证结构继承命令：必须将本轮 mdrun 输出更新至 work_gro
+    assert "evap_3.gro" in cmds[5] and "evap_work.gro" in cmds[5]
+    assert "evap_3.gro" in cmds[6] and "evap_current.gro" in cmds[6]
+    assert "evap_work.top" in cmds[7] and "evap_3.top" in cmds[7]
 
 
 def test_evap_loop_additive(tmp_path):
@@ -268,11 +273,27 @@ def test_evap_loop_additive(tmp_path):
     # additive 模式 deffnm 用 prefix，不带循环编号
     assert "evap.tpr" in cmds[3]
     assert "evap" in " ".join(cmds[4]) and "evap_0" not in " ".join(cmds[4])
+    assert len(cmds) == 9
 
 
 def test_evap_loop_restart_found(tmp_path):
-    (tmp_path / "evap_2.cpt").touch()
+    # 1. 本轮存在同轮 checkpoint (evap_3.cpt)，当从本轮续跑 (start_loop=3) 时，允许恢复本轮
+    (tmp_path / "evap_3.cpt").touch()
     cmds, restart = build_evap_loop_commands(
+        loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
+        delete_script="del.py", resname="SOL", delete_num=10,
+        atoms_per_mol=3, delete_from="bottom", mdp_file="npt.mdp",
+        work_gro="w.gro", work_top="w.top",
+        current_gro="c.gro", current_top="c.top",
+        mdrun_extra=[], wd=str(tmp_path),
+        restart_check=True, start_loop=3, mode="solvent"
+    )
+    assert restart == "evap_3.cpt"
+    assert "-cpi" in cmds[4] and "evap_3.cpt" in cmds[4]
+
+    # 2. 禁止跨轮复用：上一轮的 checkpoint (evap_2.cpt) 绝不能作为新一轮 (loop_idx=3) 的 -cpi
+    (tmp_path / "evap_2.cpt").touch()
+    cmds_cross, restart_cross = build_evap_loop_commands(
         loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
         delete_script="del.py", resname="SOL", delete_num=10,
         atoms_per_mol=3, delete_from="bottom", mdp_file="npt.mdp",
@@ -281,8 +302,8 @@ def test_evap_loop_restart_found(tmp_path):
         mdrun_extra=[], wd=str(tmp_path),
         restart_check=True, start_loop=1, mode="solvent"
     )
-    assert restart == "evap_2.cpt"
-    assert "-cpi" in cmds[4] and "evap_2.cpt" in cmds[4]
+    assert restart_cross is None
+    assert "-cpi" not in cmds_cross[4]
 
 
 # =============================================================================
