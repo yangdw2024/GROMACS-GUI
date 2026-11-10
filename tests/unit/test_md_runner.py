@@ -244,14 +244,16 @@ def test_evap_loop_solvent(tmp_path):
         mdrun_extra=["-ntmpi", "1"], wd=str(tmp_path),
         restart_check=False, start_loop=1, mode="solvent"
     )
-    # 9 个命令：删除分子、更新work_gro/top、grompp、mdrun、更新work_gro、更新current_gro、保存分轮top、更新current_top
+    # 9 个命令：删除分子(写出pending_top)、更新work_gro、grompp(用pending_top)、mdrun、提交pending_top至work_top、更新work_gro、更新current_gro、保存分轮top、更新current_top
     assert len(cmds) == 9
     assert "--solvent" in cmds[0] and "SOL" in cmds[0]
     assert "--delete-num" in cmds[0] and "10" in cmds[0]
     assert "--loop" in cmds[0] and "3" in cmds[0]
-    assert "grompp" in cmds[3]
-    assert "mdrun" in cmds[4]
-    assert "evap_3" in " ".join(cmds[4])
+    assert "evap_3_pending.top" in cmds[0]
+    assert "grompp" in cmds[2] and "evap_3_pending.top" in cmds[2]
+    assert "mdrun" in cmds[3]
+    assert "evap_3" in " ".join(cmds[3])
+    assert "evap_3_pending.top" in cmds[4] and "evap_work.top" in cmds[4]
     # 验证结构继承命令：必须将本轮 mdrun 输出更新至 work_gro
     assert "evap_3.gro" in cmds[5] and "evap_work.gro" in cmds[5]
     assert "evap_3.gro" in cmds[6] and "evap_current.gro" in cmds[6]
@@ -271,17 +273,20 @@ def test_evap_loop_additive(tmp_path):
     assert "--additive" in cmds[0] and "NA" in cmds[0]
     assert "--delete-num" not in cmds[0]
     # additive 模式 deffnm 用 prefix，不带循环编号
-    assert "evap.tpr" in cmds[3]
-    assert "evap" in " ".join(cmds[4]) and "evap_0" not in " ".join(cmds[4])
+    assert "evap.tpr" in cmds[2]
+    assert "evap" in " ".join(cmds[3]) and "evap_0" not in " ".join(cmds[3])
     assert len(cmds) == 9
 
 
 def test_evap_loop_restart_found(tmp_path):
-    # 1. 同轮中断恢复：当本轮同时存在 evap_3.cpt 与 evap_3.tpr（且尚未生成完成态 evap_3.gro）时，
-    #    必须跳过 delete_solvent 与 grompp，直接以 -cpi evap_3.cpt -append 恢复 mdrun，绝不重复删除溶剂！
+    # 1. 同轮中断正常恢复：当本轮同时存在 evap_3.cpt、evap_3.tpr、配对的 evap_3_pending.top（分子数=100-10=90）
+    #    且尚未生成完成态 evap_3.gro 时，跳过 delete_solvent 与 grompp，直接以 -cpi evap_3.cpt -append 恢复 mdrun
+    (tmp_path / "evap_2.top").write_text("[ molecules ]\nSOL 100\n", encoding="utf-8")
+    (tmp_path / "w.top").write_text("[ molecules ]\nSOL 100\n", encoding="utf-8")
     (tmp_path / "evap_3.cpt").write_bytes(b"CPT_DATA")
     (tmp_path / "evap_3.tpr").write_bytes(b"TPR_DATA")
     (tmp_path / "evap_3_pending.top").write_text("[ molecules ]\nSOL 90\n", encoding="utf-8")
+
     cmds, restart = build_evap_loop_commands(
         loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
         delete_script="del.py", resname="SOL", delete_num=10,
@@ -299,6 +304,7 @@ def test_evap_loop_restart_found(tmp_path):
     assert len(mdrun_cmds) == 1
     assert "-cpi" in mdrun_cmds[0] and "evap_3.cpt" in mdrun_cmds[0]
     assert "-append" in mdrun_cmds[0]
+    assert any("evap_3_pending.top" in c and "w.top" in c for c in flat_cmds)
 
     # 2. 禁止跨轮复用：上一轮的 checkpoint (evap_2.cpt) 绝不能作为新一轮 (loop_idx=3, start_loop=1) 的 -cpi
     (tmp_path / "evap_2.cpt").write_bytes(b"CPT2")
@@ -318,6 +324,56 @@ def test_evap_loop_restart_found(tmp_path):
     assert "-cpi" not in mdrun_cross
 
 
+def test_evap_loop_restart_missing_pending_top_or_wrong_count_raises(tmp_path):
+    (tmp_path / "evap_2.top").write_text("[ molecules ]\nSOL 100\n", encoding="utf-8")
+    (tmp_path / "w.top").write_text("[ molecules ]\nSOL 100\n", encoding="utf-8")
+    (tmp_path / "evap_3.cpt").write_bytes(b"CPT_DATA")
+    (tmp_path / "evap_3.tpr").write_bytes(b"TPR_DATA")
+
+    # 场景 A：缺失 pending_top（且无 evap_3.top）-> 必须报错停止，绝不能静默使用上一轮 w.top (100 SOL)！
+    with pytest.raises(ValueError, match="缺失本轮待提交拓扑"):
+        build_evap_loop_commands(
+            loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
+            delete_script="del.py", resname="SOL", delete_num=10,
+            atoms_per_mol=3, delete_from="bottom", mdp_file="npt.mdp",
+            work_gro="w.gro", work_top="w.top",
+            current_gro="c.gro", current_top="c.top",
+            mdrun_extra=[], wd=str(tmp_path),
+            restart_check=True, start_loop=3, mode="solvent"
+        )
+    # 确认现场保留（CPT、TPR、上一轮 TOP 均未被删除或篡改）
+    assert (tmp_path / "evap_3.cpt").read_bytes() == b"CPT_DATA"
+    assert (tmp_path / "evap_3.tpr").read_bytes() == b"TPR_DATA"
+    assert "SOL 100" in (tmp_path / "w.top").read_text(encoding="utf-8")
+
+    # 场景 B：存在 pending_top，但分子数错误（例如仍为上一轮的 100 或错误的 80，而非预期的 90）-> 必须报错停止！
+    (tmp_path / "evap_3_pending.top").write_text("[ molecules ]\nSOL 100\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="分子数.*不一致"):
+        build_evap_loop_commands(
+            loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
+            delete_script="del.py", resname="SOL", delete_num=10,
+            atoms_per_mol=3, delete_from="bottom", mdp_file="npt.mdp",
+            work_gro="w.gro", work_top="w.top",
+            current_gro="c.gro", current_top="c.top",
+            mdrun_extra=[], wd=str(tmp_path),
+            restart_check=True, start_loop=3, mode="solvent"
+        )
+
+    # 场景 C：存在 CPT 与合法的 pending_top，但缺失本轮 TPR -> 必须报错停止！
+    (tmp_path / "evap_3_pending.top").write_text("[ molecules ]\nSOL 90\n", encoding="utf-8")
+    (tmp_path / "evap_3.tpr").unlink()
+    with pytest.raises(ValueError, match="缺失有效的本轮运行输入文件"):
+        build_evap_loop_commands(
+            loop_idx=3, prefix="evap", gmx="gmx", python_exe="python",
+            delete_script="del.py", resname="SOL", delete_num=10,
+            atoms_per_mol=3, delete_from="bottom", mdp_file="npt.mdp",
+            work_gro="w.gro", work_top="w.top",
+            current_gro="c.gro", current_top="c.top",
+            mdrun_extra=[], wd=str(tmp_path),
+            restart_check=True, start_loop=3, mode="solvent"
+        )
+
+
 def test_detect_existing_loops_ignores_incomplete_or_unpaired_rounds(tmp_path):
     # 完整合法的 2 原子 GRO 辅助构造
     valid_gro = (
@@ -331,17 +387,39 @@ def test_detect_existing_loops_ignores_incomplete_or_unpaired_rounds(tmp_path):
         (tmp_path / f"evap_{i}.gro").write_text(valid_gro, encoding="utf-8")
         (tmp_path / f"evap_{i}.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
 
-    # 第 3 轮：仅有空文件或截断损坏的 GRO（模拟 mdrun 崩溃未写完） -> 绝不能误判为已完成！
+    # 第 3 轮：截断损坏的 GRO（模拟 mdrun 崩溃未写完） -> 绝不能误判为已完成！
     (tmp_path / "evap_3.gro").write_text("Truncated\n2\n    1SOL     OW    1   1.000   1.000   1.000\n", encoding="utf-8")
     (tmp_path / "evap_3.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
 
-    # 第 4 轮：GRO 完整，但既无 evap_4.top 也无任何可用拓扑 -> 绝不能误判为已完成！
+    # 第 4 轮：GRO 完整，但缺失已提交的 evap_4.top（仅有 pending.top） -> 绝不能误判为已完成！
     (tmp_path / "evap_4.gro").write_text(valid_gro, encoding="utf-8")
     (tmp_path / "evap_4_pending.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+
+    # 第 5 轮：非空但无效的任意文本文件（哪怕有配对 TOP 或无 TOP） -> 绝不能误判为已完成！
+    (tmp_path / "evap_5.gro").write_text("not a gro file at all", encoding="utf-8")
+    (tmp_path / "evap_5.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
 
     start, mx = detect_existing_loops(str(tmp_path), "evap")
     assert mx == 2, f"Expected max completed loop 2, but got {mx}"
     assert start == 3, f"Expected next start_loop 3, but got {start}"
+
+    # 单独测试：当目录中只有非空但无效的文本文件 evap_1.gro 时（无任何分轮 TOP），严格模式与旧版兼容模式均必须拒绝！
+    invalid_dir = tmp_path / "only_invalid"
+    invalid_dir.mkdir()
+    (invalid_dir / "evap_1.gro").write_text("random non-empty text", encoding="utf-8")
+    (invalid_dir / "evap_current.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+    assert detect_existing_loops(str(invalid_dir), "evap", allow_legacy=False) == (1, None)
+    assert detect_existing_loops(str(invalid_dir), "evap", allow_legacy=True) == (1, None)
+
+    # 单独测试：旧格式目录（仅有合法 GRO + evap_current.top，无分轮 evap_N.top）
+    # 默认自动识别 (allow_legacy=False) 不得降低要求，返回 (1, None)；仅显式 allow_legacy=True 时识别，且不删除或覆盖旧文件
+    legacy_dir = tmp_path / "legacy_valid"
+    legacy_dir.mkdir()
+    (legacy_dir / "evap_1.gro").write_text(valid_gro, encoding="utf-8")
+    (legacy_dir / "evap_current.top").write_text("[ molecules ]\nSOL 1\n", encoding="utf-8")
+    assert detect_existing_loops(str(legacy_dir), "evap", allow_legacy=False) == (1, None)
+    assert detect_existing_loops(str(legacy_dir), "evap", allow_legacy=True) == (2, 1)
+    assert (legacy_dir / "evap_1.gro").read_text(encoding="utf-8") == valid_gro
 
 
 def test_setup_evap_work_files_prefers_exact_prev_loop_top(tmp_path):
@@ -412,10 +490,20 @@ def test_detect_existing_loops_empty(tmp_path):
 
 
 def test_detect_existing_loops_with_files(tmp_path):
+    valid_gro = (
+        "Valid GRO\n2\n"
+        "    1SOL     OW    1   1.000   1.000   1.000\n"
+        "    1SOL    HW1    2   1.100   1.000   1.000\n"
+        "   3.00000   3.00000   3.00000\n"
+    )
+    valid_top = "[ molecules ]\nSOL 1\n"
     for i in [1, 2, 5]:
-        (tmp_path / f"evap_{i}.gro").write_text("x")
-    (tmp_path / "evap_other.gro").write_text("x")
-    (tmp_path / "other_3.gro").write_text("x")
+        (tmp_path / f"evap_{i}.gro").write_text(valid_gro, encoding="utf-8")
+        (tmp_path / f"evap_{i}.top").write_text(valid_top, encoding="utf-8")
+    # 干扰文件：非数字后缀、其他前缀、以及仅有无效单字符文本的伪造轮次 evap_9.gro
+    (tmp_path / "evap_other.gro").write_text(valid_gro, encoding="utf-8")
+    (tmp_path / "other_3.gro").write_text(valid_gro, encoding="utf-8")
+    (tmp_path / "evap_9.gro").write_text("x", encoding="utf-8")
     start, mx = detect_existing_loops(str(tmp_path), "evap")
     assert start == 6
     assert mx == 5
