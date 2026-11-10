@@ -74,6 +74,9 @@ from gui.dialogs.simulation_monitor import SimulationMonitorDialog
 
 
 from gui.workers.gromacs_worker import GromacsWorker
+from gui.themes import (
+    DARK_TOKENS, LIGHT_TOKENS, get_theme_tokens, build_palette, build_shell_stylesheet
+)
 
 
 # =============================================================================
@@ -495,8 +498,12 @@ class GromacsGUI(QMainWindow):
 
     def init_ui(self):
         self.setWindowTitle(f"{VERSION_CONFIG['display_name']} {VERSION_CONFIG['full_version']}")
-        self.setGeometry(50, 50, 1200, 750)
-        self.setMinimumSize(800, 600)
+        self.setGeometry(50, 50, 1280, 820)
+        self.setMinimumSize(880, 620)
+        self.ui_layout_mode = "modern"
+        self.console_expanded = True
+        self._sys_drawer_expanded = False
+        self.nav_buttons = []
 
         # 设置窗口图标
         icon_path = self._get_icon_path()
@@ -507,88 +514,36 @@ class GromacsGUI(QMainWindow):
 
         # 全局字体设置 - 统一字体大小，提升可读性
         app = QApplication.instance()
-        base_font = QFont("Microsoft YaHei", 10)
+        base_font = QFont("Microsoft YaHei UI", 10)
         base_font.setStyleStrategy(QFont.PreferAntialias)
         app.setFont(base_font)
 
-        # 全局样式表 - 统一控件外观
-        app.setStyleSheet("""
-            QToolTip {
-                background-color: #2B2B2B;
-                color: #FFFFFF;
-                border: 1px solid #555;
-                padding: 4px;
-                border-radius: 4px;
-                font-size: 12px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #555;
-                border-radius: 4px;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background-color: #3A3A3A;
-                color: #BBB;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                font-weight: bold;
-                font-size: 10pt;
-                min-height: 28px;
-                min-width: 115px;
-            }
-            QTabBar::tab:selected {
-                background-color: #2A82DA;
-                color: white;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #4A4A4A;
-                color: #DDD;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border-radius: 6px;
-                margin-top: 10px;
-                padding-top: 6px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 6px;
-            }
-            QPushButton {
-                border-radius: 4px;
-                padding: 5px 12px;
-                font-weight: bold;
-            }
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                padding: 4px 6px;
-                border-radius: 4px;
-                border: 1px solid #666;
-            }
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-                border: 1px solid #2A82DA;
-            }
-            QScrollArea {
-                border: none;
-            }
-        """)
-
         central = QWidget()
+        central.setObjectName("rootWidget")
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
+        # 1. 顶部精简状态栏 + 可折叠系统配置抽屉
         self.create_top_bar(main_layout)
 
-        splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(splitter, stretch=1)
+        # 2. 主体水平分栏：左侧垂直导航工作台 + 中央/底部工作区
+        self.main_h_splitter = QSplitter(Qt.Horizontal)
+        self.main_h_splitter.setHandleWidth(1)
+        main_layout.addWidget(self.main_h_splitter, stretch=1)
+
+        # 左侧导航工作台
+        self.left_nav_rail = self._create_left_nav_rail()
+        self.main_h_splitter.addWidget(self.left_nav_rail)
+
+        # 中央工作区与底部日志终端容器
+        self.center_right_splitter = QSplitter(Qt.Vertical)
+        self.center_right_splitter.setHandleWidth(1)
 
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(6, 6, 6, 6)
         self.tab_widget = QTabWidget()
         self.tab_widget.addTab(self.create_md_tab(), "Part 1: MD模拟")
         self.tab_widget.addTab(self.create_structure_tab(), "Part 2: 结构处理")
@@ -597,16 +552,26 @@ class GromacsGUI(QMainWindow):
         self.tab_widget.addTab(self.create_analysis_tab(), "Part 5: 结果分析")
         self.tab_widget.addTab(self.create_mmpbsa_tab(), "Part 6: MMPBSA")
         self.tab_widget.addTab(self.create_script_tab(), "Part 7: 自定义脚本")
+        self.tab_widget.tabBar().setVisible(False)
+        self.tab_widget.currentChanged.connect(self._sync_nav_selection)
         left_layout.addWidget(self.tab_widget)
-        splitter.addWidget(left_panel)
+        self.center_right_splitter.addWidget(left_panel)
 
-        right_panel = self.create_right_panel()
-        splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
-        splitter.setSizes([720, 480])
+        self.right_panel = self.create_right_panel()
+        self.center_right_splitter.addWidget(self.right_panel)
+        self.center_right_splitter.setStretchFactor(0, 7)
+        self.center_right_splitter.setStretchFactor(1, 3)
+        self.center_right_splitter.setSizes([540, 220])
 
-        self.statusBar().showMessage("就绪")
+        self.main_h_splitter.addWidget(self.center_right_splitter)
+        self.main_h_splitter.setStretchFactor(0, 0)
+        self.main_h_splitter.setStretchFactor(1, 1)
+        self.main_h_splitter.setSizes([210, 1070])
+        self.main_h_splitter.setCollapsible(0, False)
+
+        # 默认应用现代化深色主题
+        self._apply_dark_theme()
+        self.statusBar().showMessage("就绪 (现代化工作台模式)")
 
     # -------------------------------------------------------------------------
     # 颜色亮度调整辅助方法
@@ -622,168 +587,152 @@ class GromacsGUI(QMainWindow):
         return f"#{r:02x}{g:02x}{b:02x}"
 
     # -------------------------------------------------------------------------
-    # 顶部工具栏
+    # 顶部简洁状态栏 + 可展开系统配置抽屉 + 左侧导航工作台
     # -------------------------------------------------------------------------
-    def create_top_bar(self, parent_layout):
-        def create_colored_button(text, color_hex, hover_hex=None, disabled_hex=None):
-            btn = QPushButton(text)
-            if hover_hex is None:
-                hover_hex = self._adjust_brightness(color_hex, 1.1)
-            if disabled_hex is None:
-                disabled_hex = self._adjust_brightness(color_hex, 0.6)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color_hex};
-                    color: white;
-                    font-weight: bold;
-                    min-height: 32px;
-                    padding: 6px 16px;
-                    border-radius: 6px;
-                    border: none;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover_hex};
-                }}
-                QPushButton:pressed {{
-                    background-color: {self._adjust_brightness(color_hex, 0.9)};
-                }}
-                QPushButton:disabled {{
-                    background-color: {disabled_hex};
-                    color: #e0e0e0;
-                }}
-            """)
-            return btn
+    def _format_ver_badge_text(self):
+        label = getattr(self, "gmx_version_label", "GROMACS")
+        import re
+        m = re.search(r"20\d{2}\.\d+", label)
+        ver = m.group(0) if m else label[:10]
+        simd = "AVX512" if "avx512" in label.lower() else ("AVX2" if "avx2" in label.lower() else "")
+        return f"GMX {ver}" + (f" · {simd}" if simd else "")
 
-        # ============================================================
-        # 第一行: 顶部操作栏
-        # 左侧: 应用图标 + 标题
-        # 右侧: 8个彩色功能按钮
-        # ============================================================
-        bar1 = QHBoxLayout()
+    def _format_gpu_badge_text(self):
+        if self.sys_gpu_info.get("available") and self.sys_gpu_info.get("names"):
+            name = self.sys_gpu_info["names"][0].replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
+            return f"GPU: {name}"
+        return f"CPU: {self.sys_cpu_cores} 核"
+
+    def _toggle_sys_config_drawer(self):
+        self._sys_drawer_expanded = not getattr(self, "_sys_drawer_expanded", False)
+        if hasattr(self, "sys_config_drawer"):
+            self.sys_config_drawer.setVisible(self._sys_drawer_expanded)
+
+    def create_top_bar(self, parent_layout):
+        # 1. 顶部主控条 (单行精简状态栏)
+        header_frame = QFrame()
+        header_frame.setObjectName("topHeaderBar")
+        bar1 = QHBoxLayout(header_frame)
+        bar1.setContentsMargins(14, 8, 14, 8)
         bar1.setSpacing(10)
 
-        # 左侧: 应用标题
-        title_layout = QHBoxLayout()
-        title_layout.setSpacing(10)
-
-        title_icon = QLabel()
-        title_icon.setFixedSize(36, 36)
+        # 左侧: 品牌标识
+        title_icon = QLabel("GMX")
+        title_icon.setFixedSize(36, 28)
+        title_icon.setAlignment(Qt.AlignCenter)
         title_icon.setStyleSheet("""
             QLabel {
-                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #2196F3, stop:1 #00BCD4);
-                border-radius: 8px;
-            }
-        """)
-        title_icon.setAlignment(Qt.AlignCenter)
-        title_icon.setText("🧬")
-        title_icon.setFont(QFont("Arial", 18))
-
-        title_label = QLabel(f"{VERSION_CONFIG['display_name']} {VERSION_CONFIG['full_version']}")
-        title_label.setStyleSheet("""
-            QLabel {
-                font-size: 16px;
+                background-color: #2563EB;
+                color: #FFFFFF;
                 font-weight: bold;
-                color: #1565C0;
+                font-size: 9pt;
+                border-radius: 6px;
             }
         """)
 
-        title_layout.addWidget(title_icon)
-        title_layout.addWidget(title_label)
-        title_layout.addStretch(1)
-        bar1.addLayout(title_layout, stretch=1)
+        brand_vbox = QVBoxLayout()
+        brand_vbox.setSpacing(0)
+        title_label = QLabel(f"{VERSION_CONFIG['product_name']} v{VERSION_CONFIG['version_string']}")
+        title_label.setObjectName("brandTitle")
+        sub_label = QLabel(VERSION_CONFIG["display_name"])
+        sub_label.setObjectName("brandSubtitle")
+        brand_vbox.addWidget(title_label)
+        brand_vbox.addWidget(sub_label)
 
-        # 右侧: 8个彩色功能按钮
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(8)
+        bar1.addWidget(title_icon)
+        bar1.addLayout(brand_vbox)
+        bar1.addSpacing(8)
 
-        self.run_all_btn = create_colored_button("一键运行全部", "#4CAF50")
+        # 中部: 工作目录选择器 + 环境/硬件胶囊徽标
+        lbl_wd = QLabel("工作目录:")
+        self.path_edit = QLineEdit()
+        self.path_edit.setPlaceholderText("请选择或输入工作目录...")
+        self.path_edit.setMinimumWidth(160)
+        self.browse_btn = QPushButton("浏览...")
+        self.browse_btn.setProperty("role", "secondaryTool")
+        self.browse_btn.clicked.connect(self.browse_directory)
+
+        self.ver_badge_btn = QPushButton(self._format_ver_badge_text())
+        self.ver_badge_btn.setProperty("role", "envBadge")
+        self.ver_badge_btn.setFixedWidth(138)
+        self.ver_badge_btn.setToolTip("点击展开/收起 GROMACS 版本、CPU 线程与 GPU 加速配置")
+        self.ver_badge_btn.clicked.connect(self._toggle_sys_config_drawer)
+
+        self.gpu_badge_btn = QPushButton(self._format_gpu_badge_text())
+        self.gpu_badge_btn.setProperty("role", "gpuBadge")
+        self.gpu_badge_btn.setFixedWidth(132)
+        self.gpu_badge_btn.setToolTip("点击展开/收起硬件资源与 GPU 加速配置")
+        self.gpu_badge_btn.clicked.connect(self._toggle_sys_config_drawer)
+
+        bar1.addWidget(lbl_wd)
+        bar1.addWidget(self.path_edit, stretch=1)
+        bar1.addWidget(self.browse_btn)
+        bar1.addWidget(self.ver_badge_btn)
+        bar1.addWidget(self.gpu_badge_btn)
+
+        # 右侧: 核心操作按钮组
+        self.run_all_btn = QPushButton("▶ 一键运行")
+        self.run_all_btn.setProperty("role", "primaryRun")
         self.run_all_btn.clicked.connect(self.run_all_md)
         self.run_all_btn.setToolTip("一键执行完整的分子动力学模拟流程")
 
-        self.stop_btn = create_colored_button("停止运行", "#F44336")
+        self.stop_btn = QPushButton("■ 停止")
+        self.stop_btn.setProperty("role", "dangerStop")
         self.stop_btn.clicked.connect(self.stop_run)
         self.stop_btn.setEnabled(False)
         self.stop_btn.setToolTip("停止当前正在运行的任务")
 
-        self.mdp_editor_btn = create_colored_button("MDP编辑器", "#9C27B0")
+        self.mdp_editor_btn = QPushButton("MDP编辑")
+        self.mdp_editor_btn.setProperty("role", "secondaryTool")
         self.mdp_editor_btn.clicked.connect(self.open_mdp_editor)
         self.mdp_editor_btn.setToolTip("打开高级MDP参数可视化编辑器")
 
-        self.monitor_btn = create_colored_button("实时监控", "#00BCD4")
+        self.monitor_btn = QPushButton("监控")
+        self.monitor_btn.setProperty("role", "secondaryTool")
         self.monitor_btn.clicked.connect(self.open_monitor)
         self.monitor_btn.setToolTip("打开实时模拟监控面板（温度/压力/能量曲线）")
 
-        self.save_config_btn = create_colored_button("保存配置", "#FF9800")
+        self.save_config_btn = QPushButton("保存")
+        self.save_config_btn.setProperty("role", "secondaryTool")
         self.save_config_btn.clicked.connect(self.save_config)
         self.save_config_btn.setToolTip("保存当前所有配置参数到JSON文件")
 
-        self.load_config_btn = create_colored_button("加载配置", "#2196F3")
+        self.load_config_btn = QPushButton("加载")
+        self.load_config_btn.setProperty("role", "secondaryTool")
         self.load_config_btn.clicked.connect(self.load_config)
         self.load_config_btn.setToolTip("从JSON文件加载配置参数")
 
-        self.theme_btn = create_colored_button("主题切换", "#607D8B")
+        self.theme_btn = QPushButton("☀️ 浅色")
+        self.theme_btn.setProperty("role", "secondaryTool")
         self.theme_btn.clicked.connect(self.toggle_theme)
         self.theme_btn.setToolTip("切换深色/浅色主题")
 
-        self.version_btn = create_colored_button("版本信息", "#9E9E9E")
-        self.version_btn.clicked.connect(self.show_version)
-        self.version_btn.setToolTip("查看软件版本和系统信息")
+        self.layout_mode_btn = QPushButton("经典布局")
+        self.layout_mode_btn.setProperty("role", "secondaryTool")
+        self.layout_mode_btn.setToolTip("在现代化左导航工作台与经典顶部标签页布局之间一键切换")
+        self.layout_mode_btn.clicked.connect(self.toggle_layout_mode)
 
-        self.cleanup_btn = create_colored_button("系统清理", "#795548")
-        self.cleanup_btn.clicked.connect(self._on_system_cleanup)
-        self.cleanup_btn.setToolTip("一键清理缓存、日志和废弃临时文件")
+        bar1.addWidget(self.run_all_btn)
+        bar1.addWidget(self.stop_btn)
+        bar1.addWidget(self.mdp_editor_btn)
+        bar1.addWidget(self.monitor_btn)
+        bar1.addWidget(self.save_config_btn)
+        bar1.addWidget(self.load_config_btn)
+        bar1.addWidget(self.theme_btn)
+        bar1.addWidget(self.layout_mode_btn)
 
-        buttons_layout.addWidget(self.run_all_btn)
-        buttons_layout.addWidget(self.stop_btn)
-        buttons_layout.addWidget(self.mdp_editor_btn)
-        buttons_layout.addWidget(self.monitor_btn)
-        buttons_layout.addWidget(self.save_config_btn)
-        buttons_layout.addWidget(self.load_config_btn)
-        buttons_layout.addWidget(self.theme_btn)
-        buttons_layout.addWidget(self.version_btn)
-        buttons_layout.addWidget(self.cleanup_btn)
+        parent_layout.addWidget(header_frame)
 
-        self.log_btn = create_colored_button("日志目录", "#607D8B")
-        self.log_btn.clicked.connect(self._on_open_log_dir)
-        self.log_btn.setToolTip("打开分级日志目录\nERROR日志永久保留，其他级别按天数自动清理")
-        buttons_layout.addWidget(self.log_btn)
+        # 2. 可展开的系统与硬件配置抽屉（保留全部原有控件属性，默认折叠降噪）
+        self.sys_config_drawer = QFrame()
+        self.sys_config_drawer.setObjectName("sysConfigDrawer")
+        sys_config_layout = QHBoxLayout(self.sys_config_drawer)
+        sys_config_layout.setContentsMargins(14, 8, 14, 8)
+        sys_config_layout.setSpacing(14)
 
-        bar1.addLayout(buttons_layout)
-        parent_layout.addLayout(bar1)
-
-        # ============================================================
-        # 第二行: 系统配置栏
-        # 左侧: GROMACS版本 + 计算资源 + GPU加速
-        # 右侧: 工作目录
-        # ============================================================
-        bar2 = QHBoxLayout()
-        bar2.setSpacing(10)
-
-        # 左侧: 系统配置组
-        sys_config_group = QGroupBox("系统配置")
-        sys_config_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #1565C0;
-                border: 1px solid #BBDEFB;
-                border-radius: 6px;
-                margin-top: 8px;
-                padding-top: 4px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
-        sys_config_layout = QHBoxLayout(sys_config_group)
-        sys_config_layout.setSpacing(15)
-
-        # GROMACS版本区域 - 使用网格布局避免小屏幕重叠
         ver_grid = QGridLayout()
         ver_grid.setSpacing(6)
-        
+
         self.ver_combo = QComboBox()
         default_idx = 0
         if self.sys_gmx_versions:
@@ -796,42 +745,30 @@ class GromacsGUI(QMainWindow):
             self.ver_combo.addItem(self.gmx_version_label, self.gmx_path)
         self.ver_combo.setCurrentIndex(default_idx)
         self.ver_combo.currentIndexChanged.connect(self._on_version_changed)
-        self.ver_combo.setMinimumWidth(150)
-        
+        self.ver_combo.setMinimumWidth(180)
+
         self.gmx_browse_btn = QPushButton("浏览...")
-        self.gmx_browse_btn.setToolTip("手动选择GROMACS的gmx.exe文件位置\n如果程序未自动检测到GROMACS，请点击此按钮")
+        self.gmx_browse_btn.setToolTip("手动选择GROMACS的gmx.exe文件位置")
         self.gmx_browse_btn.clicked.connect(self._browse_gmx_exe)
-        
+
         self.show_all_versions_cb = QCheckBox("显示所有版本")
-        self.show_all_versions_cb.setToolTip("显示所有目录，包括无效和重复版本")
         self.show_all_versions_cb.setChecked(True)
         self.show_all_versions_cb.stateChanged.connect(self._on_show_all_versions_changed)
-        
+
         self.version_mgmt_btn = QPushButton("版本管理")
-        self.version_mgmt_btn.setToolTip("批量导入/导出GROMACS版本")
-        self.version_mgmt_btn.setMaximumWidth(70)
         self.version_mgmt_btn.clicked.connect(self._on_version_management)
-        
+
         self.open_update_pkg_btn = QPushButton("更新包")
-        self.open_update_pkg_btn.setToolTip("打开更新包目录\n支持手动拖拽ZIP文件进行增量/全量更新")
-        self.open_update_pkg_btn.setMaximumWidth(55)
         self.open_update_pkg_btn.clicked.connect(self._on_open_update_packages)
-        
+
         ver_grid.addWidget(QLabel("GROMACS版本:"), 0, 0)
         ver_grid.addWidget(self.ver_combo, 0, 1, 1, 2)
         ver_grid.addWidget(self.gmx_browse_btn, 0, 3)
         ver_grid.addWidget(self.show_all_versions_cb, 1, 0)
         ver_grid.addWidget(self.version_mgmt_btn, 1, 1)
         ver_grid.addWidget(self.open_update_pkg_btn, 1, 2)
-        
         sys_config_layout.addLayout(ver_grid)
 
-        line1 = QFrame()
-        line1.setFrameShape(QFrame.VLine)
-        line1.setStyleSheet("color: #E0E0E0;")
-        sys_config_layout.addWidget(line1)
-
-        # 计算资源
         cpu_layout = QHBoxLayout()
         cpu_layout.setSpacing(6)
         self.cfg_nt = QSpinBox()
@@ -839,22 +776,10 @@ class GromacsGUI(QMainWindow):
         self.cfg_nt.setRange(1, self.sys_cpu_cores)
         self.cfg_nt.setValue(safe_cores)
         self.cfg_nt.setSuffix(" 核")
-        self.cfg_nt.setToolTip(f"本机检测到 {self.sys_cpu_cores} 个逻辑核心\n"
-                               f"默认使用 {safe_cores} 核\n"
-                               f"建议GPU加速时使用4-12核，CPU主要负责I/O和调度\n"
-                               f"对于Ryzen 9700X等8核CPU，推荐使用8-12线程")
         self.cfg_mem_label = QLabel(f"总内存: {self.sys_memory_gb} GB")
-        self.cfg_mem_label.setStyleSheet("color: #666;")
         self.cfg_mem_limit = QCheckBox("内存限制")
         self.cfg_mem_limit.setChecked(False)
-        self.cfg_mem_limit.setToolTip(
-            "限制GROMACS进程使用的系统内存(RAM)，防止系统卡死\n"
-            "注意：GPU显存(VRAM)不受此限制，由GROMACS自动分配\n"
-            "  - GPU显存：存放原子坐标、力场参数、PME网格等计算数据\n"
-            "  - 系统内存：grompp预处理、轨迹写入、I/O缓存等\n"
-            f"本机总内存: {self.sys_memory_gb} GB")
         self.cfg_mem_value = QDoubleSpinBox()
-        # 范围：0.5 GB ~ 系统总内存，默认8 GB
         mem_default = min(8.0, float(self.sys_memory_gb))
         self.cfg_mem_value.setRange(0.5, float(self.sys_memory_gb))
         self.cfg_mem_value.setSuffix(" GB")
@@ -862,39 +787,24 @@ class GromacsGUI(QMainWindow):
         self.cfg_mem_value.setSingleStep(0.5)
         self.cfg_mem_value.setDecimals(1)
         self.cfg_mem_value.setEnabled(False)
-        self.cfg_mem_value.setToolTip(
-            f"可选范围: 0.5 ~ {self.sys_memory_gb} GB\n"
-            f"默认值: {mem_default} GB\n"
-            "超过此限制的GROMACS进程会被系统终止")
         self.cfg_mem_limit.toggled.connect(self.cfg_mem_value.setEnabled)
         cpu_layout.addWidget(QLabel("线程数(-nt):"))
         cpu_layout.addWidget(self.cfg_nt)
-        cpu_layout.addSpacing(10)
+        cpu_layout.addSpacing(8)
         cpu_layout.addWidget(self.cfg_mem_label)
-        cpu_layout.addSpacing(10)
+        cpu_layout.addSpacing(8)
         cpu_layout.addWidget(self.cfg_mem_limit)
         cpu_layout.addWidget(self.cfg_mem_value)
         sys_config_layout.addLayout(cpu_layout)
 
-        # 分隔线
-        line2 = QFrame()
-        line2.setFrameShape(QFrame.VLine)
-        line2.setStyleSheet("color: #E0E0E0;")
-        sys_config_layout.addWidget(line2)
-
-        # GPU加速
         gpu_layout = QHBoxLayout()
         gpu_layout.setSpacing(6)
         self.cfg_gpu = QCheckBox("启用GPU")
         if self.sys_gpu_info["available"]:
             self.cfg_gpu.setChecked(True)
-            gpu_names = ", ".join(self.sys_gpu_info["names"][:2])
-            gpu_mems = ", ".join(self.sys_gpu_info["memories"][:2])
-            self.cfg_gpu.setToolTip(f"GPU: {gpu_names}\n显存: {gpu_mems}\n驱动: {self.sys_gpu_info['driver']}\n{self.sys_gpu_info['cuda_version']}")
         else:
             self.cfg_gpu.setChecked(False)
             self.cfg_gpu.setEnabled(False)
-            self.cfg_gpu.setToolTip("未检测到NVIDIA GPU")
         gpu_layout.addWidget(self.cfg_gpu)
 
         self.cfg_gpu_id = QComboBox()
@@ -908,75 +818,118 @@ class GromacsGUI(QMainWindow):
 
         self.cfg_gpu_auto = QCheckBox("自动模式")
         self.cfg_gpu_auto.setChecked(True)
-        self.cfg_gpu_auto.setToolTip("自动模式: GROMACS自行决定最佳GPU/CPU分配")
         gpu_layout.addWidget(self.cfg_gpu_auto)
-        
+
         self.gpu_diagnose_btn = QPushButton("GPU诊断")
-        self.gpu_diagnose_btn.setToolTip("检测GPU加速是否正确配置，诊断可能的问题")
         self.gpu_diagnose_btn.clicked.connect(self._on_gpu_diagnose)
         gpu_layout.addWidget(self.gpu_diagnose_btn)
-        
         sys_config_layout.addLayout(gpu_layout)
 
-        bar2.addWidget(sys_config_group, stretch=2)
+        self.sys_config_drawer.setVisible(False)
+        parent_layout.addWidget(self.sys_config_drawer)
 
-        # 右侧: 工作目录
-        path_group = QGroupBox("工作目录")
-        path_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #2E7D32;
-                border: 1px solid #C8E6C9;
-                border-radius: 6px;
-                margin-top: 8px;
-                padding-top: 4px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
-        path_layout = QHBoxLayout(path_group)
-        path_layout.setSpacing(8)
-        self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("请选择或输入工作目录...")
-        self.path_edit.setStyleSheet("""
-            QLineEdit {
-                padding: 6px 10px;
-                border: 1px solid #BDBDBD;
-                border-radius: 4px;
-                min-height: 24px;
-            }
-            QLineEdit:focus {
-                border-color: #2196F3;
-            }
-        """)
-        self.browse_btn = QPushButton("浏览...")
-        self.browse_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                font-weight: bold;
-                min-height: 32px;
-                padding: 6px 16px;
-                border-radius: 6px;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:pressed {
-                background-color: #1565C0;
-            }
-        """)
-        self.browse_btn.clicked.connect(self.browse_directory)
-        path_layout.addWidget(QLabel("路径:"))
-        path_layout.addWidget(self.path_edit, stretch=1)
-        path_layout.addWidget(self.browse_btn)
-        bar2.addWidget(path_group, stretch=3)
+    def _create_left_nav_rail(self):
+        """创建左侧垂直导航工作台（完整映射原有七大功能模块与系统工具）"""
+        rail = QFrame()
+        rail.setObjectName("leftNavRail")
+        rail.setMinimumWidth(200)
+        vbox = QVBoxLayout(rail)
+        vbox.setContentsMargins(8, 12, 8, 10)
+        vbox.setSpacing(4)
 
-        parent_layout.addLayout(bar2)
+        nav_groups = [
+            ("动力学与建模", [
+                (0, "Part 1 · MD 模拟"),
+                (1, "Part 2 · 结构处理"),
+                (2, "Part 3 · 高级模拟 (SA/退火)"),
+            ]),
+            ("轨迹与后处理分析", [
+                (3, "Part 4 · 轨迹处理"),
+                (4, "Part 5 · 结果分析"),
+                (5, "Part 6 · MMPBSA 自由能"),
+            ]),
+            ("自动化与脚本", [
+                (6, "Part 7 · 自定义脚本"),
+            ]),
+        ]
+
+        self.nav_buttons = []
+        for group_title, items in nav_groups:
+            sec_lbl = QLabel(group_title)
+            sec_lbl.setProperty("role", "navSectionHeader")
+            vbox.addWidget(sec_lbl)
+            for tab_idx, text in items:
+                btn = QPushButton(text)
+                btn.setProperty("role", "navItem")
+                btn.setProperty("active", "true" if tab_idx == 0 else "false")
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.clicked.connect(lambda checked=False, idx=tab_idx: self._on_nav_item_clicked(idx))
+                vbox.addWidget(btn)
+                self.nav_buttons.append((tab_idx, btn))
+            vbox.addSpacing(4)
+
+        vbox.addStretch(1)
+
+        # 底部系统维护快捷入口（收纳原顶栏低频按钮）
+        sys_sec = QLabel("系统与维护")
+        sys_sec.setProperty("role", "navSectionHeader")
+        vbox.addWidget(sys_sec)
+
+        self.cleanup_btn = QPushButton("系统清理")
+        self.cleanup_btn.setProperty("role", "secondaryTool")
+        self.cleanup_btn.clicked.connect(self._on_system_cleanup)
+        self.cleanup_btn.setToolTip("一键清理缓存、日志和废弃临时文件")
+
+        self.log_btn = QPushButton("日志目录")
+        self.log_btn.setProperty("role", "secondaryTool")
+        self.log_btn.clicked.connect(self._on_open_log_dir)
+        self.log_btn.setToolTip("打开分级日志目录")
+
+        self.version_btn = QPushButton("版本与系统信息")
+        self.version_btn.setProperty("role", "secondaryTool")
+        self.version_btn.clicked.connect(self.show_version)
+        self.version_btn.setToolTip("查看软件版本和系统信息")
+
+        vbox.addWidget(self.cleanup_btn)
+        vbox.addWidget(self.log_btn)
+        vbox.addWidget(self.version_btn)
+        return rail
+
+    def _on_nav_item_clicked(self, tab_idx: int):
+        if hasattr(self, "tab_widget") and 0 <= tab_idx < self.tab_widget.count():
+            self.tab_widget.setCurrentIndex(tab_idx)
+        self._sync_nav_selection(tab_idx)
+
+    def _sync_nav_selection(self, active_idx: int):
+        for idx, btn in getattr(self, "nav_buttons", []):
+            is_active = (idx == active_idx)
+            btn.setProperty("active", "true" if is_active else "false")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def toggle_layout_mode(self):
+        """在现代化左导航布局与经典顶部 Tab 布局之间切换（回退机制）"""
+        if getattr(self, "ui_layout_mode", "modern") == "modern":
+            self.ui_layout_mode = "classic"
+            self.left_nav_rail.setVisible(False)
+            self.sys_config_drawer.setVisible(True)
+            self.tab_widget.tabBar().setVisible(True)
+            self.center_right_splitter.setOrientation(Qt.Horizontal)
+            self.center_right_splitter.setSizes([740, 480])
+            self.layout_mode_btn.setText("现代布局")
+            self.statusBar().showMessage("已切换至经典布局模式（顶部标签页 + 右侧日志栏）")
+        else:
+            self.ui_layout_mode = "modern"
+            self.left_nav_rail.setVisible(True)
+            self.sys_config_drawer.setVisible(self._sys_drawer_expanded)
+            self.tab_widget.tabBar().setVisible(False)
+            self.center_right_splitter.setOrientation(Qt.Vertical)
+            if getattr(self, "console_expanded", True):
+                self.center_right_splitter.setSizes([540, 220])
+            else:
+                self.center_right_splitter.setSizes([720, 38])
+            self.layout_mode_btn.setText("经典布局")
+            self.statusBar().showMessage("已切换至现代化工作台模式（左导航 + 底部可折叠终端）")
 
     # -------------------------------------------------------------------------
     # Part 1: 分子动力学模拟
@@ -4434,53 +4387,80 @@ class GromacsGUI(QMainWindow):
         return tab
 
     # -------------------------------------------------------------------------
-    # 右侧面板
+    # 底部可折叠运行日志与进度终端 (兼容经典右侧面板模式)
     # -------------------------------------------------------------------------
     def create_right_panel(self):
-        panel = QWidget()
+        panel = QFrame()
+        panel.setObjectName("bottomConsoleDrawer")
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(0)
 
-        log_group = QGroupBox("实时运行日志")
-        log_group.setStyleSheet("QGroupBox { font-weight: bold; color: #333; }")
-        log_layout = QVBoxLayout(log_group)
+        header = QFrame()
+        header.setObjectName("consoleHeaderBar")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 4, 12, 4)
+        header_layout.setSpacing(8)
 
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 10))
-        self.log_text.setLineWrapMode(QTextEdit.WidgetWidth)
-        log_layout.addWidget(self.log_text)
-
-        layout.addWidget(log_group, stretch=1)
+        title_lbl = QLabel("▶ 实时运行日志与进度终端")
+        title_lbl.setStyleSheet("font-weight: bold;")
+        header_layout.addWidget(title_lbl)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setFormat("%p% - %v/%m")
-        layout.addWidget(self.progress_bar)
+        self.progress_bar.setMinimumWidth(200)
+        self.progress_bar.setMaximumHeight(18)
+        header_layout.addWidget(self.progress_bar)
 
-        btn_layout = QHBoxLayout()
-        self.clear_log_btn = QPushButton("清除日志")
-        self.clear_log_btn.clicked.connect(self.clear_log)
-        self.export_log_btn = QPushButton("导出日志")
-        self.export_log_btn.clicked.connect(self.export_log)
-        self.diagnosis_btn = QPushButton("查看错误诊断")
-        self.diagnosis_btn.setStyleSheet(
-            "QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #7B1FA2; }"
-            "QPushButton:disabled { background-color: #BA68C8; }"
-        )
+        header_layout.addStretch(1)
+
+        self.diagnosis_btn = QPushButton("错误诊断")
+        self.diagnosis_btn.setProperty("role", "secondaryTool")
         self.diagnosis_btn.clicked.connect(self.show_error_diagnosis)
         self.diagnosis_btn.setToolTip("查看最近错误的诊断结果和修复建议")
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.diagnosis_btn)
-        btn_layout.addWidget(self.clear_log_btn)
-        btn_layout.addWidget(self.export_log_btn)
-        layout.addLayout(btn_layout)
+
+        self.clear_log_btn = QPushButton("清除日志")
+        self.clear_log_btn.setProperty("role", "secondaryTool")
+        self.clear_log_btn.clicked.connect(self.clear_log)
+
+        self.export_log_btn = QPushButton("导出日志")
+        self.export_log_btn.setProperty("role", "secondaryTool")
+        self.export_log_btn.clicked.connect(self.export_log)
+
+        self.toggle_console_btn = QPushButton("▼ 折叠终端")
+        self.toggle_console_btn.setProperty("role", "secondaryTool")
+        self.toggle_console_btn.setToolTip("折叠或展开底部日志视口，释放中央工作区面积")
+        self.toggle_console_btn.clicked.connect(self.toggle_console_drawer)
+
+        header_layout.addWidget(self.diagnosis_btn)
+        header_layout.addWidget(self.clear_log_btn)
+        header_layout.addWidget(self.export_log_btn)
+        header_layout.addWidget(self.toggle_console_btn)
+        layout.addWidget(header)
+
+        self.log_text = QTextEdit()
+        self.log_text.setObjectName("consoleLogView")
+        self.log_text.setReadOnly(True)
+        self.log_text.setFont(QFont("Consolas", 10))
+        self.log_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        layout.addWidget(self.log_text, stretch=1)
 
         return panel
+
+    def toggle_console_drawer(self):
+        self.console_expanded = not getattr(self, "console_expanded", True)
+        self.log_text.setVisible(self.console_expanded)
+        if hasattr(self, "toggle_console_btn"):
+            self.toggle_console_btn.setText("▲ 展开终端" if not self.console_expanded else "▼ 折叠终端")
+        if hasattr(self, "center_right_splitter") and getattr(self, "ui_layout_mode", "modern") == "modern":
+            total_h = max(400, self.center_right_splitter.height())
+            if self.console_expanded:
+                self.center_right_splitter.setSizes([int(total_h * 0.7), int(total_h * 0.3)])
+            else:
+                self.center_right_splitter.setSizes([total_h - 36, 36])
 
     def _setup_log_colors(self):
         self._color_info = QColor("#4FC3F7")
@@ -4498,226 +4478,20 @@ class GromacsGUI(QMainWindow):
 
     def _apply_dark_theme(self):
         self.current_theme = "dark"
-        self.theme_btn.setText("浅色主题")
-        self.theme_btn.setStyleSheet(
-            "QPushButton { background-color: #2A82DA; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #1E6BB8; }"
-        )
-
+        self.theme_btn.setText("☀️ 浅色")
+        tokens = get_theme_tokens("dark")
         app = QApplication.instance()
-        app.setStyleSheet("")
-
-        palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(53, 53, 53))
-        palette.setColor(QPalette.WindowText, Qt.white)
-        palette.setColor(QPalette.Base, QColor(35, 35, 35))
-        palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
-        palette.setColor(QPalette.ToolTipBase, Qt.white)
-        palette.setColor(QPalette.ToolTipText, Qt.white)
-        palette.setColor(QPalette.Text, Qt.white)
-        palette.setColor(QPalette.Button, QColor(53, 53, 53))
-        palette.setColor(QPalette.ButtonText, Qt.white)
-        palette.setColor(QPalette.BrightText, Qt.red)
-        palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-        palette.setColor(QPalette.HighlightedText, Qt.black)
-        app.setPalette(palette)
-
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #444;
-            }
-        """)
-
+        app.setPalette(build_palette(tokens))
+        app.setStyleSheet(build_shell_stylesheet(tokens))
         self._update_groupbox_styles_dark()
 
     def _apply_light_theme(self):
         self.current_theme = "light"
-        self.theme_btn.setText("深色主题")
-        self.theme_btn.setStyleSheet(
-            "QPushButton { background-color: #FFFFFF; color: #1E6BB8; font-weight: bold; padding: 6px 16px; border: 1px solid #2A82DA; }"
-            "QPushButton:hover { background-color: #E3F2FD; }"
-        )
-
-        palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(245, 245, 245))
-        palette.setColor(QPalette.WindowText, QColor(33, 33, 33))
-        palette.setColor(QPalette.Base, QColor(255, 255, 255))
-        palette.setColor(QPalette.AlternateBase, QColor(240, 240, 240))
-        palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
-        palette.setColor(QPalette.ToolTipText, QColor(33, 33, 33))
-        palette.setColor(QPalette.Text, QColor(33, 33, 33))
-        palette.setColor(QPalette.Button, QColor(230, 230, 230))
-        palette.setColor(QPalette.ButtonText, QColor(33, 33, 33))
-        palette.setColor(QPalette.BrightText, Qt.red)
-        palette.setColor(QPalette.Highlight, QColor(25, 118, 210))
-        palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
-        palette.setColor(QPalette.PlaceholderText, QColor(128, 128, 128))
-        QApplication.instance().setPalette(palette)
-
+        self.theme_btn.setText("🌙 深色")
+        tokens = get_theme_tokens("light")
         app = QApplication.instance()
-        app.setStyleSheet("""
-            QMainWindow {
-                background-color: #F5F5F5;
-            }
-            QWidget {
-                color: #212121;
-            }
-            QGroupBox {
-                font-weight: bold;
-                color: #0D47A1;
-                margin-top: 8px;
-                border: 1px solid #BBDEFB;
-                border-radius: 4px;
-                padding-top: 8px;
-                background-color: #FAFAFA;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 4px;
-                color: #0D47A1;
-            }
-            QLineEdit {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-                padding: 4px;
-                selection-background-color: #1976D2;
-            }
-            QLineEdit:focus {
-                border: 1px solid #1976D2;
-            }
-            QComboBox {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-                padding: 4px;
-                min-width: 80px;
-            }
-            QComboBox:focus {
-                border: 1px solid #1976D2;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 24px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #FFFFFF;
-                color: #212121;
-                selection-background-color: #BBDEFB;
-                selection-color: #0D47A1;
-            }
-            QSpinBox, QDoubleSpinBox {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-                padding: 4px;
-            }
-            QLabel {
-                color: #424242;
-            }
-            QCheckBox {
-                color: #424242;
-            }
-            QCheckBox::indicator {
-                width: 16px;
-                height: 16px;
-            }
-            QRadioButton {
-                color: #424242;
-            }
-            QTabWidget::pane {
-                border: 1px solid #BDBDBD;
-                background-color: #FAFAFA;
-            }
-            QTabBar::tab {
-                background-color: #E0E0E0;
-                color: #616161;
-                padding: 8px 16px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background-color: #FAFAFA;
-                color: #0D47A1;
-                font-weight: bold;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #EEEEEE;
-            }
-            QScrollArea {
-                border: none;
-            }
-            QTextEdit {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-            }
-            QPlainTextEdit {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-            }
-            QListWidget {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-                border-radius: 3px;
-            }
-            QListWidget::item:selected {
-                background-color: #BBDEFB;
-                color: #0D47A1;
-            }
-            QProgressBar {
-                border: 1px solid #BDBDBD;
-                border-radius: 4px;
-                text-align: center;
-                color: #212121;
-            }
-            QProgressBar::chunk {
-                background-color: #1976D2;
-                border-radius: 3px;
-            }
-            QMenuBar {
-                background-color: #F5F5F5;
-                color: #212121;
-            }
-            QMenuBar::item:selected {
-                background-color: #BBDEFB;
-                color: #0D47A1;
-            }
-            QMenu {
-                background-color: #FFFFFF;
-                color: #212121;
-                border: 1px solid #BDBDBD;
-            }
-            QMenu::item:selected {
-                background-color: #BBDEFB;
-                color: #0D47A1;
-            }
-            QToolTip {
-                background-color: #FFF8E1;
-                color: #212121;
-                border: 1px solid #FFC107;
-                padding: 4px;
-            }
-        """)
-
-        self.log_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #FFFFFF;
-                color: #333333;
-                border: 1px solid #CCCCCC;
-            }
-        """)
-
+        app.setPalette(build_palette(tokens))
+        app.setStyleSheet(build_shell_stylesheet(tokens))
         self._update_groupbox_styles_light()
 
     def _update_groupbox_styles_dark(self):
@@ -4726,7 +4500,7 @@ class GromacsGUI(QMainWindow):
             current_style = w.styleSheet()
             if "border:" in current_style and "border-radius" in current_style:
                 continue
-            dark_group_style = "QGroupBox { font-weight: bold; color: #90CAF9; margin-top: 8px; }"
+            dark_group_style = "QGroupBox { font-weight: bold; color: #93C5FD; margin-top: 8px; }"
             w.setStyleSheet(dark_group_style)
 
     def _update_groupbox_styles_light(self):
@@ -4735,7 +4509,7 @@ class GromacsGUI(QMainWindow):
             current_style = w.styleSheet()
             if "border:" in current_style and "border-radius" in current_style:
                 continue
-            light_group_style = "QGroupBox { font-weight: bold; color: #1565C0; margin-top: 8px; }"
+            light_group_style = "QGroupBox { font-weight: bold; color: #0D47A1; margin-top: 8px; }"
             w.setStyleSheet(light_group_style)
 
     def _log_system_info(self):
@@ -5286,6 +5060,8 @@ class GromacsGUI(QMainWindow):
                 simd_str = meta.simd or "未知"
 
                 self.add_log(f"GROMACS版本已切换为: {version_name}", "success")
+                if hasattr(self, "ver_badge_btn"):
+                    self.ver_badge_btn.setText(self._format_ver_badge_text())
                 self.add_log(
                     f"  版本号: {version_str}, GPU: {gpu_str}, "
                     f"PLUMED: {plumed_str}, SIMD: {simd_str}", "info"
@@ -6783,11 +6559,11 @@ class GromacsGUI(QMainWindow):
                     step_data["center_check"] = step_info["center_check"].isChecked()
                 if "princ_check" in step_info:
                     step_data["princ_check"] = step_info["princ_check"].isChecked()
-                if "custom_out_check" in step_info:
+                if "custom_out_check" in step_info and step_info["custom_out_check"] is not None:
                     step_data["custom_out_check"] = step_info["custom_out_check"].isChecked()
                 if "custom_out_edit" in step_info and step_info["custom_out_edit"]:
                     step_data["custom_out_edit"] = step_info["custom_out_edit"].text().strip()
-                if "restart_check" in step_info:
+                if "restart_check" in step_info and step_info["restart_check"] is not None:
                     step_data["restart_check"] = step_info["restart_check"].isChecked()
                 config["part1_steps"][step_key] = step_data
 
@@ -6901,11 +6677,11 @@ class GromacsGUI(QMainWindow):
                         step_info["center_check"].setChecked(step_data["center_check"])
                     if "princ_check" in step_info and "princ_check" in step_data:
                         step_info["princ_check"].setChecked(step_data["princ_check"])
-                    if "custom_out_check" in step_info and "custom_out_check" in step_data:
+                    if "custom_out_check" in step_info and step_info["custom_out_check"] is not None and "custom_out_check" in step_data:
                         step_info["custom_out_check"].setChecked(step_data["custom_out_check"])
                     if "custom_out_edit" in step_info and step_info["custom_out_edit"] and "custom_out_edit" in step_data:
                         step_info["custom_out_edit"].setText(step_data["custom_out_edit"])
-                    if "restart_check" in step_info and "restart_check" in step_data:
+                    if "restart_check" in step_info and step_info["restart_check"] is not None and "restart_check" in step_data:
                         step_info["restart_check"].setChecked(step_data["restart_check"])
 
             if hasattr(self, 'script_type') and "script_type" in config:
