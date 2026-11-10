@@ -249,8 +249,8 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         border-color: {t["border_focus"]};
     }}
 
-    /* ==================== 基础表单与分组框样式 ==================== */
-    QGroupBox {{
+    /* ==================== 基础表单与容器样式（限定在主窗口与其容器内部） ==================== */
+    QMainWindow QGroupBox, QWidget#rootWidget QGroupBox {{
         font-weight: bold;
         color: {t["group_title"]};
         background-color: {t["bg_surface"]};
@@ -259,13 +259,16 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         margin-top: {px(10)};
         padding-top: {px(8)};
     }}
-    QGroupBox::title {{
+    QMainWindow QGroupBox::title, QWidget#rootWidget QGroupBox::title {{
         subcontrol-origin: margin;
         left: {px(10)};
         padding: 0 {px(6)};
         color: {t["group_title"]};
     }}
-    QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+    QMainWindow QLineEdit, QWidget#rootWidget QLineEdit,
+    QMainWindow QComboBox, QWidget#rootWidget QComboBox,
+    QMainWindow QSpinBox, QWidget#rootWidget QSpinBox,
+    QMainWindow QDoubleSpinBox, QWidget#rootWidget QDoubleSpinBox {{
         background-color: {t["bg_elevated"]};
         color: {t["text_primary"]};
         border: {px(1)} solid {t["border"]};
@@ -273,7 +276,10 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         padding: {px(3)} {px(6)};
         min-height: {px(20)};
     }}
-    QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+    QMainWindow QLineEdit:focus, QWidget#rootWidget QLineEdit:focus,
+    QMainWindow QComboBox:focus, QWidget#rootWidget QComboBox:focus,
+    QMainWindow QSpinBox:focus, QWidget#rootWidget QSpinBox:focus,
+    QMainWindow QDoubleSpinBox:focus, QWidget#rootWidget QDoubleSpinBox:focus {{
         border: {px(1)} solid {t["border_focus"]};
     }}
     QComboBox QAbstractItemView {{
@@ -282,12 +288,12 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         selection-background-color: {t["primary"]};
         selection-color: #FFFFFF;
     }}
-    QTabWidget::pane {{
+    QTabWidget#mainTabWidget::pane {{
         border: {px(1)} solid {t["border"]};
         border-radius: {px(6)};
         background-color: {t["bg_surface"]};
     }}
-    QTabBar::tab {{
+    QTabWidget#mainTabWidget > QTabBar::tab {{
         background-color: {t["bg_elevated"]};
         color: {t["text_secondary"]};
         padding: {px(6)} {px(14)};
@@ -296,15 +302,18 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         border-top-right-radius: {px(5)};
         font-weight: bold;
     }}
-    QTabBar::tab:selected {{
+    QTabWidget#mainTabWidget > QTabBar::tab:selected {{
         background-color: {t["primary"]};
         color: #FFFFFF;
     }}
-    QScrollArea {{
+    QMainWindow QScrollArea, QWidget#rootWidget QScrollArea {{
         border: none;
         background-color: transparent;
     }}
-    QTextEdit, QPlainTextEdit, QListWidget, QTableWidget {{
+    QMainWindow QTextEdit, QWidget#rootWidget QTextEdit,
+    QMainWindow QPlainTextEdit, QWidget#rootWidget QPlainTextEdit,
+    QMainWindow QListWidget, QWidget#rootWidget QListWidget,
+    QMainWindow QTableWidget, QWidget#rootWidget QTableWidget {{
         background-color: {t["bg_elevated"]};
         color: {t["text_primary"]};
         border: {px(1)} solid {t["border"]};

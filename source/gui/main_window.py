@@ -545,6 +545,8 @@ class GromacsGUI(QMainWindow):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(6, 6, 6, 6)
         self.tab_widget = QTabWidget()
+        self.tab_widget.setObjectName("mainTabWidget")
+        self.tab_widget.tabBar().setObjectName("mainTabBar")
         self.tab_widget.addTab(self.create_md_tab(), "Part 1: MD模拟")
         self.tab_widget.addTab(self.create_structure_tab(), "Part 2: 结构处理")
         self.tab_widget.addTab(self.create_advanced_tab(), "Part 3: 高级模拟")
@@ -589,44 +591,84 @@ class GromacsGUI(QMainWindow):
     # -------------------------------------------------------------------------
     # 顶部简洁状态栏 + 可展开系统配置抽屉 + 左侧导航工作台
     # -------------------------------------------------------------------------
-    def _format_ver_badge_text(self):
+    def _format_ver_badge_text(self, compact: bool = False):
         label = getattr(self, "gmx_version_label", "GROMACS")
         import re
         m = re.search(r"20\d{2}\.\d+", label)
         ver = m.group(0) if m else label[:10]
+        if compact:
+            return f"GMX {ver}"
         simd = "AVX512" if "avx512" in label.lower() else ("AVX2" if "avx2" in label.lower() else "")
         return f"GMX {ver}" + (f" · {simd}" if simd else "")
 
-    def _format_gpu_badge_text(self):
+    def _format_gpu_badge_text(self, compact: bool = False):
         if self.sys_gpu_info.get("available") and self.sys_gpu_info.get("names"):
             name = self.sys_gpu_info["names"][0].replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
+            if compact:
+                short_gpu = name.replace("RTX ", "").split()[0]
+                return f"GPU: {short_gpu}"
             return f"GPU: {name}"
-        return f"CPU: {self.sys_cpu_cores} 核"
+        return "CPU" if compact else f"CPU: {self.sys_cpu_cores} 核"
 
     def _toggle_sys_config_drawer(self):
         self._sys_drawer_expanded = not getattr(self, "_sys_drawer_expanded", False)
         if hasattr(self, "sys_config_drawer"):
             self.sys_config_drawer.setVisible(self._sys_drawer_expanded)
 
+    def _adapt_responsive_topbar(self, width: int):
+        """窗口宽度变化时自适应调整顶部栏元素紧凑度与更多菜单"""
+        if not hasattr(self, "more_tools_btn"):
+            return
+        is_compact = (width < 1180)
+        is_narrow = (width < 960)
+
+        if hasattr(self, "lbl_workdir_title"):
+            self.lbl_workdir_title.setVisible(not is_narrow)
+        if hasattr(self, "path_edit"):
+            self.path_edit.setMinimumWidth(80 if is_narrow else 140)
+
+        if hasattr(self, "ver_badge_btn"):
+            self.ver_badge_btn.setText(self._format_ver_badge_text(compact=is_compact))
+            self.ver_badge_btn.setFixedWidth(96 if is_compact else 138)
+
+        if hasattr(self, "gpu_badge_btn"):
+            self.gpu_badge_btn.setText(self._format_gpu_badge_text(compact=is_compact))
+            self.gpu_badge_btn.setFixedWidth(88 if is_compact else 132)
+
+        # 低频操作按钮响应式显隐（窄屏收纳至更多菜单）
+        show_direct_tools = not is_compact
+        for w in [self.mdp_editor_btn, self.monitor_btn, self.save_config_btn, self.load_config_btn]:
+            if hasattr(self, w.objectName() or "") or w:
+                w.setVisible(show_direct_tools)
+
+        # 在更多菜单中动态调整对应项说明
+        if hasattr(self, "layout_mode_action"):
+            mode_text = "切换为经典双栏视图" if getattr(self, "ui_layout_mode", "modern") == "modern" else "切换为现代化工作台"
+            self.layout_mode_action.setText(mode_text)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adapt_responsive_topbar(event.size().width())
+
     def create_top_bar(self, parent_layout):
         # 1. 顶部主控条 (单行精简状态栏)
         header_frame = QFrame()
         header_frame.setObjectName("topHeaderBar")
         bar1 = QHBoxLayout(header_frame)
-        bar1.setContentsMargins(14, 8, 14, 8)
-        bar1.setSpacing(10)
+        bar1.setContentsMargins(12, 6, 12, 6)
+        bar1.setSpacing(6)
 
         # 左侧: 品牌标识
         title_icon = QLabel("GMX")
-        title_icon.setFixedSize(36, 28)
+        title_icon.setFixedSize(34, 26)
         title_icon.setAlignment(Qt.AlignCenter)
         title_icon.setStyleSheet("""
             QLabel {
                 background-color: #2563EB;
                 color: #FFFFFF;
                 font-weight: bold;
-                font-size: 9pt;
-                border-radius: 6px;
+                font-size: 8.5pt;
+                border-radius: 5px;
             }
         """)
 
@@ -641,13 +683,13 @@ class GromacsGUI(QMainWindow):
 
         bar1.addWidget(title_icon)
         bar1.addLayout(brand_vbox)
-        bar1.addSpacing(8)
+        bar1.addSpacing(6)
 
         # 中部: 工作目录选择器 + 环境/硬件胶囊徽标
-        lbl_wd = QLabel("工作目录:")
+        self.lbl_workdir_title = QLabel("工作目录:")
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("请选择或输入工作目录...")
-        self.path_edit.setMinimumWidth(160)
+        self.path_edit.setPlaceholderText("工作目录路径...")
+        self.path_edit.setMinimumWidth(100)
         self.browse_btn = QPushButton("浏览...")
         self.browse_btn.setProperty("role", "secondaryTool")
         self.browse_btn.clicked.connect(self.browse_directory)
@@ -664,13 +706,13 @@ class GromacsGUI(QMainWindow):
         self.gpu_badge_btn.setToolTip("点击展开/收起硬件资源与 GPU 加速配置")
         self.gpu_badge_btn.clicked.connect(self._toggle_sys_config_drawer)
 
-        bar1.addWidget(lbl_wd)
+        bar1.addWidget(self.lbl_workdir_title)
         bar1.addWidget(self.path_edit, stretch=1)
         bar1.addWidget(self.browse_btn)
         bar1.addWidget(self.ver_badge_btn)
         bar1.addWidget(self.gpu_badge_btn)
 
-        # 右侧: 核心操作按钮组
+        # 右侧: 核心高频操作按钮
         self.run_all_btn = QPushButton("▶ 一键运行")
         self.run_all_btn.setProperty("role", "primaryRun")
         self.run_all_btn.clicked.connect(self.run_all_md)
@@ -682,6 +724,7 @@ class GromacsGUI(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.stop_btn.setToolTip("停止当前正在运行的任务")
 
+        # 宽屏直接展示的辅助工具按钮（窄屏自动隐藏并收纳于更多菜单）
         self.mdp_editor_btn = QPushButton("MDP编辑")
         self.mdp_editor_btn.setProperty("role", "secondaryTool")
         self.mdp_editor_btn.clicked.connect(self.open_mdp_editor)
@@ -707,9 +750,31 @@ class GromacsGUI(QMainWindow):
         self.theme_btn.clicked.connect(self.toggle_theme)
         self.theme_btn.setToolTip("切换深色/浅色主题")
 
+        # “更多操作 ▾” 菜单按钮（保证任何分辨率和缩放下一键访问全部工具）
+        from PyQt5.QtWidgets import QMenu, QToolButton
+        self.more_tools_btn = QToolButton()
+        self.more_tools_btn.setText("更多 ▾")
+        self.more_tools_btn.setProperty("role", "secondaryTool")
+        self.more_tools_btn.setPopupMode(QToolButton.InstantPopup)
+        self.more_tools_btn.setToolTip("查看更多工具、配置及系统操作")
+
+        self.more_tools_menu = QMenu(self)
+        self.more_tools_menu.addAction("⚙ 高级 MDP 参数编辑器", self.open_mdp_editor)
+        self.more_tools_menu.addAction("📈 实时曲线监控面板", self.open_monitor)
+        self.more_tools_menu.addSeparator()
+        self.more_tools_menu.addAction("💾 保存当前配置到 JSON", self.save_config)
+        self.more_tools_menu.addAction("📂 从 JSON 加载配置", self.load_config)
+        self.more_tools_menu.addSeparator()
+        self.layout_mode_action = self.more_tools_menu.addAction("🔄 切换为经典双栏视图", self.toggle_layout_mode)
+        self.more_tools_menu.addSeparator()
+        self.more_tools_menu.addAction("🧹 系统缓存清理", self._on_system_cleanup)
+        self.more_tools_menu.addAction("📁 打开分级日志目录", self._on_open_log_dir)
+        self.more_tools_menu.addAction("ℹ 查看版本与系统信息", self.show_version)
+        self.more_tools_btn.setMenu(self.more_tools_menu)
+
         self.layout_mode_btn = QPushButton("经典布局")
         self.layout_mode_btn.setProperty("role", "secondaryTool")
-        self.layout_mode_btn.setToolTip("在现代化左导航工作台与经典顶部标签页布局之间一键切换")
+        self.layout_mode_btn.setToolTip("在现代化左导航工作台与经典双栏视图之间切换")
         self.layout_mode_btn.clicked.connect(self.toggle_layout_mode)
 
         bar1.addWidget(self.run_all_btn)
@@ -718,6 +783,7 @@ class GromacsGUI(QMainWindow):
         bar1.addWidget(self.monitor_btn)
         bar1.addWidget(self.save_config_btn)
         bar1.addWidget(self.load_config_btn)
+        bar1.addWidget(self.more_tools_btn)
         bar1.addWidget(self.theme_btn)
         bar1.addWidget(self.layout_mode_btn)
 
@@ -4447,7 +4513,8 @@ class GromacsGUI(QMainWindow):
         self.log_text.setFont(QFont("Consolas", 10))
         self.log_text.setLineWrapMode(QTextEdit.WidgetWidth)
         layout.addWidget(self.log_text, stretch=1)
-
+        # 默认折叠日志终端时进度条在顶头始终可见，未运行时初始隐藏
+        self.progress_bar.setVisible(False)
         return panel
 
     def toggle_console_drawer(self):
