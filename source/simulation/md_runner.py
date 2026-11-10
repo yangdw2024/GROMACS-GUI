@@ -310,6 +310,88 @@ def _copy_cmd(src: str, dst: str) -> List[str]:
     return ["cp", src, dst]
 
 
+def _is_valid_gro_file(gro_path: str) -> bool:
+    """检查 GRO 文件是否存在且为标准合法 GROMACS GRO 格式（头部原子数 == 实际原子行数、每行长度 >= 44、非空盒子行）。"""
+    if not os.path.isfile(gro_path):
+        return False
+    try:
+        with open(gro_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        if len(lines) < 3:
+            return False
+        num_atoms = int(lines[1].strip())
+        if num_atoms < 0 or len(lines) - 3 != num_atoms:
+            return False
+        for i in range(2, 2 + num_atoms):
+            if len(lines[i].rstrip("\r\n")) < 44:
+                return False
+        box_parts = lines[-1].strip().split()
+        if len(box_parts) < 3:
+            return False
+        for bp in box_parts[:3]:
+            float(bp)
+        return True
+    except Exception:
+        return False
+
+
+def _read_top_solvent_count(top_path: str, solvent: str) -> Optional[int]:
+    """解析 TOP 文件 [ molecules ] 节中指定溶剂的总分子数；若文件无效或未找到则返回 None。"""
+    if not os.path.isfile(top_path) or not solvent:
+        return None
+    try:
+        with open(top_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        in_molecules = False
+        total = 0
+        found = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and "]" in stripped:
+                sec = stripped.split("]", 1)[0].lstrip("[").strip().lower()
+                in_molecules = (sec == "molecules")
+                continue
+            if in_molecules and stripped and not stripped.startswith(";"):
+                code = line.split(";", 1)[0].strip()
+                parts = code.split()
+                if len(parts) >= 2 and parts[0] == solvent:
+                    cnt = int(parts[1])
+                    if cnt < 0:
+                        return None
+                    total += cnt
+                    found = True
+        return total if found else None
+    except Exception:
+        return None
+
+
+def _is_valid_top_file(top_path: str) -> bool:
+    """检查 TOP 文件是否存在且包含有效的 [ molecules ] 节。"""
+    if not os.path.isfile(top_path) or os.path.getsize(top_path) == 0:
+        return False
+    try:
+        with open(top_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        in_molecules = False
+        has_entry = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and "]" in stripped:
+                sec = stripped.split("]", 1)[0].lstrip("[").strip().lower()
+                in_molecules = (sec == "molecules")
+                continue
+            if in_molecules and stripped and not stripped.startswith(";"):
+                code = line.split(";", 1)[0].strip()
+                parts = code.split()
+                if len(parts) >= 2:
+                    if int(parts[1]) < 0:
+                        return False
+                    has_entry = True
+        return has_entry
+    except Exception:
+        return False
+
+
 def build_evap_loop_commands(
     loop_idx: int, prefix: str, gmx: str, python_exe: str,
     delete_script: str, resname: str, delete_num: int,
@@ -319,19 +401,20 @@ def build_evap_loop_commands(
     restart_check: bool = False, start_loop: int = 1,
     mode: str = "solvent"
 ) -> Tuple[List[List[str]], Optional[str]]:
-    """构建蒸发单轮的 7 个命令
+    """构建蒸发单轮命令列表
 
     mode: "solvent"（逐轮删除）或 "additive"（一次性删除全部）
     返回 (commands, restart_cpt_msg)
     """
     new_gro = f"{prefix}_new.gro"
-    new_top = f"{prefix}_new.top"
     if mode == "additive":
         tpr_file = f"{prefix}.tpr"
         deffnm = prefix
+        pending_top = f"{prefix}_new.top"
     else:
         tpr_file = f"{prefix}_{loop_idx}.tpr"
         deffnm = f"{prefix}_{loop_idx}"
+        pending_top = f"{deffnm}_pending.top"
 
     if mode == "solvent":
         del_cmd = [
@@ -344,7 +427,7 @@ def build_evap_loop_commands(
             "--input", work_gro,
             "--output", new_gro,
             "--topology", work_top,
-            "--topology-output", new_top,
+            "--topology-output", pending_top,
         ]
     else:
         del_cmd = [
@@ -354,27 +437,103 @@ def build_evap_loop_commands(
             "--input", work_gro,
             "--output", new_gro,
             "--topology", work_top,
-            "--topology-output", new_top,
+            "--topology-output", pending_top,
         ]
-
-    commands = [
-        del_cmd,
-        _move_cmd(new_gro, work_gro),
-        _move_cmd(new_top, work_top),
-        [gmx, "grompp", "-f", mdp_file, "-c", work_gro,
-         "-p", work_top, "-o", tpr_file, "-maxwarn", "200"],
-    ]
 
     mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + list(mdrun_extra)
     restart_msg = None
-    if restart_check and loop_idx > start_loop:
-        prev_cpt = f"{prefix}_{loop_idx - 1}.cpt"
-        if os.path.isfile(os.path.join(wd, prev_cpt)):
-            mdrun_cmd.extend(["-cpi", prev_cpt])
-            restart_msg = prev_cpt
-    commands.append(mdrun_cmd)
 
+    curr_cpt = f"{deffnm}.cpt"
+    curr_cpt_path = os.path.join(wd, curr_cpt)
+    curr_tpr_path = os.path.join(wd, tpr_file)
+    curr_gro_path = os.path.join(wd, f"{deffnm}.gro")
+    pending_top_path = os.path.join(wd, pending_top)
+    loop_top_path = os.path.join(wd, f"{deffnm}.top")
+
+    # 检查是否为“同一轮中断后从本轮 checkpoint 恢复”：
+    # 当 restart_check=True 且 loop_idx == start_loop 且存在本轮 .cpt（且本轮尚未生成完整的完成态 .gro）时进入严格校验
+    in_round_cpt_resume = (
+        mode == "solvent"
+        and restart_check
+        and loop_idx == start_loop
+        and os.path.isfile(curr_cpt_path)
+        and not _is_valid_gro_file(curr_gro_path)
+    )
+
+    commands = []
+    if in_round_cpt_resume:
+        # 路径 3（同一轮中断恢复）：强制验证 TPR、CPT 与本轮正确拓扑状态，校验失败立即抛错停止并保留现场
+        if os.path.getsize(curr_cpt_path) == 0:
+            raise ValueError(f"同轮恢复校验失败: 检查点文件为空 ({curr_cpt})")
+        if not os.path.isfile(curr_tpr_path) or os.path.getsize(curr_tpr_path) == 0:
+            raise ValueError(
+                f"同轮恢复校验失败: 检测到检查点 {curr_cpt}，但缺失有效的本轮运行输入文件 {tpr_file}，已停止并保留现场"
+            )
+
+        # 查找本轮专属拓扑（优先 pending_top，其次本轮已保存的 loop_top），严禁静默回退使用上一轮的 work_top
+        resume_top_rel = None
+        resume_top_abs = None
+        if os.path.isfile(pending_top_path):
+            resume_top_rel = pending_top
+            resume_top_abs = pending_top_path
+        elif os.path.isfile(loop_top_path):
+            resume_top_rel = f"{deffnm}.top"
+            resume_top_abs = loop_top_path
+        else:
+            raise ValueError(
+                f"同轮恢复校验失败: 检测到 {curr_cpt}，但缺失本轮待提交拓扑 {pending_top}，拒绝静默使用上一轮拓扑，已停止并保留现场"
+            )
+
+        cand_count = _read_top_solvent_count(resume_top_abs, resname)
+        if cand_count is None:
+            raise ValueError(
+                f"同轮恢复校验失败: 无法在 {resume_top_rel} 的 [ molecules ] 中读取有效的 {resname} 分子数"
+            )
+
+        # 若存在上一轮基准拓扑（{prefix}_{loop_idx-1}.top、{prefix}_original.top 或 work_top），校验分子数差值必须等于 delete_num
+        base_top_candidates = []
+        if loop_idx == 1:
+            base_top_candidates.append(os.path.join(wd, f"{prefix}_original.top"))
+        else:
+            base_top_candidates.append(os.path.join(wd, f"{prefix}_{loop_idx - 1}.top"))
+        base_top_candidates.append(os.path.join(wd, work_top))
+
+        for base_top in base_top_candidates:
+            if os.path.isfile(base_top) and os.path.abspath(base_top) != os.path.abspath(resume_top_abs):
+                base_count = _read_top_solvent_count(base_top, resname)
+                if base_count is not None:
+                    expected_count = max(0, base_count - delete_num)
+                    if cand_count != expected_count:
+                        raise ValueError(
+                            f"同轮恢复校验失败: {resume_top_rel} 中 {resname} 分子数 ({cand_count}) "
+                            f"与预期 ({base_count} - {delete_num} = {expected_count}) 不一致，已停止并保留现场"
+                        )
+                    break
+
+        # 保留已有 TPR 与 CPT，跳过 delete_solvent 与 grompp，直接恢复本轮 mdrun
+        mdrun_cmd.extend(["-cpi", curr_cpt, "-append"])
+        restart_msg = curr_cpt
+        commands.append(mdrun_cmd)
+        if resume_top_rel == pending_top:
+            commands.append(_move_cmd(pending_top, work_top))
+        elif resume_top_rel != work_top:
+            commands.append(_copy_cmd(resume_top_rel, work_top))
+    else:
+        # 路径 1 / 2（连续新一轮计算 / 从已完成上一轮继续新一轮）：
+        # grompp 使用 pending_top，待 mdrun 成功后再将 pending_top 提交至 work_top，确保中断时 pending_top 留存供同轮恢复校验
+        commands.extend([
+            del_cmd,
+            _move_cmd(new_gro, work_gro),
+            [gmx, "grompp", "-f", mdp_file, "-c", work_gro,
+             "-p", pending_top, "-o", tpr_file, "-maxwarn", "200"],
+            mdrun_cmd,
+            _move_cmd(pending_top, work_top),
+        ])
+
+    # mdrun 完成后：将本轮输出结构更新至 work_gro 供下一轮继承，并保存本轮专属拓扑与 current 备份
+    commands.append(_copy_cmd(f"{deffnm}.gro", work_gro))
     commands.append(_copy_cmd(f"{deffnm}.gro", current_gro))
+    commands.append(_copy_cmd(work_top, f"{deffnm}.top"))
     commands.append(_copy_cmd(work_top, current_top))
 
     return commands, restart_msg
@@ -445,21 +604,44 @@ def build_full_md_pipeline(gmx: str, state: dict) -> List[List[str]]:
 # 蒸发步骤：文件管理辅助函数
 # =============================================================================
 
-def detect_existing_loops(wd: str, prefix: str) -> Tuple[int, Optional[int]]:
-    """扫描工作目录，检测已存在的蒸发轮次。
+def detect_existing_loops(wd: str, prefix: str, allow_legacy: bool = False) -> Tuple[int, Optional[int]]:
+    """扫描工作目录，检测已成功完成的蒸发轮次。
 
     返回 (start_loop, max_existing)：
-      - 若存在 {prefix}_N.gro 文件，start_loop = max(N)+1, max_existing = max(N)
+      - 默认严格模式 (allow_legacy=False)：必须同时具备完整合法的 {prefix}_{N}.gro（满足标准 GROMACS GRO 行宽与原子数）、
+        合法的配对拓扑 {prefix}_{N}.top，且不存在未提交的 {prefix}_{N}_pending.top；绝不将非空无效文本或未配对 TOP 的轮次误判为已完成。
+      - 显式旧版兼容模式 (allow_legacy=True)：仅在显式开启时用于识别仅有合法 {prefix}_{N}.gro 且存在 {prefix}_current.top 的旧版目录，
+        同样要求 GRO 必须通过严格格式校验。
+      - 若存在已完成轮次，start_loop = max(N)+1, max_existing = max(N)
       - 否则 start_loop = 1, max_existing = None
     """
-    existing_loops = []
+    if not os.path.isdir(wd):
+        return 1, None
+
+    candidates = []
     for f in os.listdir(wd):
         if f.startswith(f"{prefix}_") and f.endswith(".gro"):
             suffix = f[len(prefix) + 1:-4]
             if suffix.isdigit():
-                existing_loops.append(int(suffix))
-    if existing_loops:
-        return max(existing_loops) + 1, max(existing_loops)
+                candidates.append(int(suffix))
+
+    valid_loops = []
+    for loop_num in candidates:
+        gro_p = os.path.join(wd, f"{prefix}_{loop_num}.gro")
+        top_p = os.path.join(wd, f"{prefix}_{loop_num}.top")
+        pending_p = os.path.join(wd, f"{prefix}_{loop_num}_pending.top")
+
+        # 无论新旧模式，GRO 必须是完整合法的标准 GRO 文件，且不能残留未提交的 pending_top
+        if not _is_valid_gro_file(gro_p) or os.path.isfile(pending_p):
+            continue
+
+        if _is_valid_top_file(top_p):
+            valid_loops.append(loop_num)
+        elif allow_legacy and _is_valid_top_file(os.path.join(wd, f"{prefix}_current.top")):
+            valid_loops.append(loop_num)
+
+    if valid_loops:
+        return max(valid_loops) + 1, max(valid_loops)
     return 1, None
 
 
@@ -549,8 +731,8 @@ def setup_evap_work_files(
             prev_loop = start_loop - 1
             prev_gro = f"{prefix}_{prev_loop}.gro"
             possible_tops = [
-                os.path.join(wd, f"{prefix}_current.top"),
                 os.path.join(wd, f"{prefix}_{prev_loop}.top"),
+                os.path.join(wd, f"{prefix}_current.top"),
                 resolve(top_file),
             ]
             prev_top = None
