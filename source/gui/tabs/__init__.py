@@ -1,0 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+GROMACS-GUI 独立功能页组件包
+按模块逐步收敛 main_window.py 庞大单体。
+"""
+
+from .script_tab import ScriptTab
+
+__all__ = ["ScriptTab"]
