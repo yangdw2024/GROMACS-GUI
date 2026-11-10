@@ -158,7 +158,9 @@ def test_config_save_load_data_consistency(gui_window, qapp, tmp_path):
     cfg_file = tmp_path / "gui_test_config.json"
 
     win.path_edit.setText(str(tmp_path))
-    win.cfg_nt.setValue(7)
+    # 选定一个不超过系统核心数的合法线程数（在 CI 机器上 cpu_cores 可能是 4）
+    test_nt = max(1, min(3, win.sys_cpu_cores))
+    win.cfg_nt.setValue(test_nt)
     win.evap_resname.setText("SOL_TEST")
 
     with mock.patch.object(QFileDialog, "getSaveFileName", return_value=(str(cfg_file), "JSON")), \
@@ -175,7 +177,7 @@ def test_config_save_load_data_consistency(gui_window, qapp, tmp_path):
          mock.patch.object(QMessageBox, "critical"):
         win.load_config()
 
-    assert win.cfg_nt.value() == 7
+    assert win.cfg_nt.value() == test_nt
 
 
 def test_task_running_state_controls(gui_window, qapp):
