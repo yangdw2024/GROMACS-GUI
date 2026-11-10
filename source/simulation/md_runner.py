@@ -367,14 +367,18 @@ def build_evap_loop_commands(
 
     mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + list(mdrun_extra)
     restart_msg = None
-    if restart_check and loop_idx > start_loop:
-        prev_cpt = f"{prefix}_{loop_idx - 1}.cpt"
-        if os.path.isfile(os.path.join(wd, prev_cpt)):
-            mdrun_cmd.extend(["-cpi", prev_cpt])
-            restart_msg = prev_cpt
+    # 仅允许恢复当前轮（本轮中断后从本轮 checkpoint 续算），禁止跨删除步骤复用上一轮 checkpoint
+    if restart_check and loop_idx == start_loop:
+        curr_cpt = f"{deffnm}.cpt"
+        if os.path.isfile(os.path.join(wd, curr_cpt)):
+            mdrun_cmd.extend(["-cpi", curr_cpt])
+            restart_msg = curr_cpt
     commands.append(mdrun_cmd)
 
+    # 关键修复：将本轮 mdrun 输出结构更新至 work_gro，供下一轮继续继承松弛结构
+    commands.append(_copy_cmd(f"{deffnm}.gro", work_gro))
     commands.append(_copy_cmd(f"{deffnm}.gro", current_gro))
+    commands.append(_copy_cmd(work_top, f"{deffnm}.top"))
     commands.append(_copy_cmd(work_top, current_top))
 
     return commands, restart_msg
