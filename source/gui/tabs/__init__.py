@@ -9,11 +9,13 @@ from .mmpbsa_tab import MmpbsaTab
 from .trajectory_tab import TrajectoryTab
 from .structure_tab import StructureTab
 from .advanced_tab import AdvancedTab
+from .analysis_tab import AnalysisTab
 
 __all__ = [
     "ScriptTab",
     "MmpbsaTab",
     "TrajectoryTab",
     "StructureTab",
-    "AdvancedTab"
+    "AdvancedTab",
+    "AnalysisTab"
 ]
