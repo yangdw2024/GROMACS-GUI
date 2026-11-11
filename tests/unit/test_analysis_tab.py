@@ -126,29 +126,30 @@ def test_fragment_indexing_and_rdf(ana_tab, tmp_path):
     ana_tab.log_requested.connect(lambda m, l: logs.append((m, l)))
     ana_tab.run_requested.connect(lambda c, w, s, i: cmds.append((c, w, s, i)))
 
-    # 4.1 索引生成
-    ana_tab.ndx_gen_nmol.setValue(2)
-    ana_tab.ndx_gen_natom.setValue(10)
-    ana_tab.ndx_gen_output.setText("frag_test.ndx")
-    ana_tab.ndx_gen_table.setRowCount(1)
-    ana_tab.ndx_gen_table.setItem(0, 0, QTableWidgetItem("Donor_Core"))
-    ana_tab.ndx_gen_table.setItem(0, 1, QTableWidgetItem("1-5,7"))
-    ana_tab.generate_fragment_ndx()
+    with mock.patch("PyQt5.QtWidgets.QMessageBox.warning"):
+        # 4.1 索引生成
+        ana_tab.ndx_gen_nmol.setValue(2)
+        ana_tab.ndx_gen_natom.setValue(10)
+        ana_tab.ndx_gen_output.setText("frag_test.ndx")
+        ana_tab.ndx_gen_table.setRowCount(1)
+        ana_tab.ndx_gen_table.setItem(0, 0, QTableWidgetItem("Donor_Core"))
+        ana_tab.ndx_gen_table.setItem(0, 1, QTableWidgetItem("1-5,7"))
+        ana_tab.generate_fragment_ndx()
 
-    out_ndx = tmp_path / "frag_test.ndx"
-    assert out_ndx.is_file()
-    content = out_ndx.read_text(encoding="utf-8")
-    assert "[ Donor_Core ]" in content
-    # 2 分子 * 6 原子 = 12 个原子
-    assert "1 2 3 4 5 7 11 12 13 14 15 17" in content
+        out_ndx = tmp_path / "frag_test.ndx"
+        assert out_ndx.is_file()
+        content = out_ndx.read_text(encoding="utf-8")
+        assert "[ Donor_Core ]" in content
+        # 2 分子 * 6 原子 = 12 个原子
+        assert "1 2 3 4 5 7 11 12 13 14 15 17" in content
 
-    # 4.2 批量 RDF
-    ana_tab.rdf_frag_ndx_input.setText("frag_test.ndx")
-    ana_tab.rdf_frag_ref.setText("Donor_Core")
-    ana_tab.rdf_frag_sel.setText("Donor_Core")
-    ana_tab.run_fragment_rdf_batch()
-    assert len(cmds) == 1
-    assert cmds[0][0][0][0:2] == ["gmx", "rdf"]
+        # 4.2 批量 RDF
+        ana_tab.rdf_frag_ndx_input.setText("frag_test.ndx")
+        ana_tab.rdf_frag_ref.setText("Donor_Core")
+        ana_tab.rdf_frag_sel.setText("Donor_Core")
+        ana_tab.run_fragment_rdf_batch()
+        assert len(cmds) == 1
+        assert cmds[0][0][0][0:2] == ["gmx", "rdf"]
 
 
 def test_pairdist_and_energy_decomp(ana_tab, tmp_path):
@@ -158,24 +159,27 @@ def test_pairdist_and_energy_decomp(ana_tab, tmp_path):
     ana_tab.run_requested.connect(lambda c, w, s, i: cmds.append((c, w, s, i)))
     ana_tab.log_requested.connect(lambda m, l: logs.append((m, l)))
 
-    # 5.1 pairdist
-    ana_tab.pairdist_ref.setText("GroupA")
-    ana_tab.pairdist_sel.setText("GroupB")
-    ana_tab.run_pairdist_analysis()
-    assert len(cmds) == 1
-    assert cmds[0][0][0][0:2] == ["gmx", "pairdist"]
+    with mock.patch("PyQt5.QtWidgets.QMessageBox.warning"):
+        # 5.1 pairdist
+        ana_tab.pairdist_ref.setText("GroupA")
+        ana_tab.pairdist_sel.setText("GroupB")
+        ana_tab.run_pairdist_analysis()
+        assert len(cmds) == 1
+        assert cmds[0][0][0][0:2] == ["gmx", "pairdist"]
 
-    # 5.2 energy decomp
-    (tmp_path / "md.edr").touch()
-    mock_run = mock.MagicMock(return_value=mock.MagicMock(returncode=0, stderr=""))
-    with mock.patch("subprocess.run", mock_run):
-        ana_tab.run_energy_decomposition()
-    assert mock_run.call_count == 1
-    assert any("能量分析完成" in m for m, _ in logs)
+        # 5.2 energy decomp
+        (tmp_path / "md.edr").touch()
+        mock_run = mock.MagicMock(return_value=mock.MagicMock(returncode=0, stderr=""))
+        with mock.patch("subprocess.run", mock_run):
+            ana_tab.run_energy_decomposition()
+        assert mock_run.call_count == 1
+        assert any("能量分析完成" in m for m, _ in logs)
 
 
 def test_plot_generation(ana_tab, tmp_path):
     """测试 6: 验证自动绘图 (matplotlib Agg 离屏出图)"""
+    pytest.importorskip("matplotlib")
+
     # 构造测试 xvg 文件
     xvg_file = tmp_path / "test_data.xvg"
     xvg_file.write_text(
@@ -192,14 +196,16 @@ def test_plot_generation(ana_tab, tmp_path):
     logs = []
     ana_tab.log_requested.connect(lambda m, l: logs.append((m, l)))
 
-    ana_tab.plot_input.setText("test_data.xvg")
-    ana_tab.plot_output.setText("test_out.png")
-    ana_tab.generate_plot()
+    with mock.patch("PyQt5.QtWidgets.QMessageBox.warning") as mock_warn:
+        ana_tab.plot_input.setText("test_data.xvg")
+        ana_tab.plot_output.setText("test_out.png")
+        ana_tab.generate_plot()
 
-    out_png = tmp_path / "test_out.png"
-    assert out_png.is_file()
-    assert out_png.stat().st_size > 0
-    assert any("图表生成成功" in m for m, _ in logs)
+        out_png = tmp_path / "test_out.png"
+        assert out_png.is_file()
+        assert out_png.stat().st_size > 0
+        assert any("图表生成成功" in m for m, _ in logs)
+        assert mock_warn.call_count == 0
 
 
 def test_analysis_config_roundtrip_and_running_state(ana_tab):
