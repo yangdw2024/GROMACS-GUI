@@ -34,7 +34,6 @@ from PyQt5.QtWidgets import (
 
 from simulation.analysis import build_analysis_command
 
-
 class AnalysisTab(QWidget):
     """Part 5: 结果分析与可视化独立页面组件
 
@@ -88,18 +87,7 @@ class AnalysisTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #455A64;
-            }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(line_edit, dialog_title, filter_str))
         layout.addWidget(line_edit, stretch=1)
         layout.addWidget(btn)
@@ -121,7 +109,6 @@ class AnalysisTab(QWidget):
 
         # 1. 通用分析参数
         common_group = QGroupBox("通用分析参数")
-        common_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
         cgrid = QGridLayout(common_group)
 
         self.ana_input_xtc, ana_xtc_layout = self._create_file_input(
@@ -179,46 +166,25 @@ class AnalysisTab(QWidget):
 
         # 2. 文件管理与校验
         file_check_group = QGroupBox("📁 文件管理与校验")
-        file_check_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #37474F;
-                margin-top: 8px; padding-top: 8px;
-                border: 2px solid #455A64; border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        file_check_group.setProperty("role", "phaseGroup")
         file_check_layout = QVBoxLayout(file_check_group)
         file_check_layout.setSpacing(8)
 
         file_check_desc = QLabel("校验轨迹文件完整性，检查核心文件是否存在")
         file_check_desc.setWordWrap(True)
-        file_check_desc.setStyleSheet("color: #263238; font-size: 11px;")
+        file_check_desc.setProperty("role", "desc")
         file_check_layout.addWidget(file_check_desc)
 
         file_check_grid = QGridLayout()
         file_check_grid.setSpacing(6)
 
         self.file_check_btn = QPushButton("校验轨迹文件 (gmx check)")
-        self.file_check_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #455A64; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #37474F; }
-        """)
+        self.file_check_btn.setProperty("role", "actionBtn")
         self.file_check_btn.clicked.connect(self.run_file_check)
         file_check_grid.addWidget(self.file_check_btn, 0, 0)
 
         self.file_status_btn = QPushButton("检查文件状态")
-        self.file_status_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #78909C; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #546E7A; }
-        """)
+        self.file_status_btn.setProperty("role", "secondaryTool")
         self.file_status_btn.clicked.connect(self.check_file_status)
         file_check_grid.addWidget(self.file_status_btn, 0, 1)
 
@@ -229,21 +195,7 @@ class AnalysisTab(QWidget):
 
         # 3. 能量与热力学分析
         energy_group = QGroupBox("🌡️ 能量与热力学分析")
-        energy_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #E65100;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #EF6C00;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        energy_group.setProperty("role", "phaseGroup")
         energy_layout = QVBoxLayout(energy_group)
         energy_layout.setSpacing(6)
 
@@ -255,20 +207,7 @@ class AnalysisTab(QWidget):
 
         for key, name, desc, default_out, color in energy_analyses:
             grp = QGroupBox(f"{name}")
-            grp.setStyleSheet(f"""
-                QGroupBox {{
-                    font-weight: bold;
-                    color: #BF360C;
-                    margin-top: 4px;
-                    border: 1px solid #FFAB91;
-                    border-radius: 6px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }}
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -279,16 +218,7 @@ class AnalysisTab(QWidget):
             ref_edit.setPlaceholderText("参考结构 (可选)")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: {self._adjust_brightness(color, 0.9)}; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -309,21 +239,7 @@ class AnalysisTab(QWidget):
 
         # 4. 结构稳定性分析
         struct_group = QGroupBox("📐 结构稳定性分析")
-        struct_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #1565C0;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #1976D2;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        struct_group.setProperty("role", "phaseGroup")
         struct_layout = QVBoxLayout(struct_group)
         struct_layout.setSpacing(6)
 
@@ -338,20 +254,7 @@ class AnalysisTab(QWidget):
 
         for key, name, desc, default_out, color in struct_analyses:
             grp = QGroupBox(f"{name}")
-            grp.setStyleSheet(f"""
-                QGroupBox {{
-                    font-weight: bold;
-                    color: #0D47A1;
-                    margin-top: 4px;
-                    border: 1px solid #64B5F6;
-                    border-radius: 6px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }}
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -362,16 +265,7 @@ class AnalysisTab(QWidget):
             ref_edit.setPlaceholderText("参考结构 (可选)")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: {self._adjust_brightness(color, 0.9)}; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -398,21 +292,7 @@ class AnalysisTab(QWidget):
 
         # 5. 相互作用分析
         interact_group = QGroupBox("🔗 相互作用分析")
-        interact_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #2E7D32;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #388E3C;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        interact_group.setProperty("role", "phaseGroup")
         interact_layout = QVBoxLayout(interact_group)
         interact_layout.setSpacing(6)
 
@@ -426,20 +306,7 @@ class AnalysisTab(QWidget):
 
         for key, name, desc, default_out, color in interact_analyses:
             grp = QGroupBox(f"{name}")
-            grp.setStyleSheet(f"""
-                QGroupBox {{
-                    font-weight: bold;
-                    color: #1B5E20;
-                    margin-top: 4px;
-                    border: 1px solid #81C784;
-                    border-radius: 6px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }}
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -450,16 +317,7 @@ class AnalysisTab(QWidget):
             ref_edit.setPlaceholderText("参考结构 (可选)")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: {self._adjust_brightness(color, 0.9)}; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -515,36 +373,13 @@ class AnalysisTab(QWidget):
 
         # 6. 片段分析
         fragment_group = QGroupBox("🧩 片段分析")
-        fragment_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #006064;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #00838F;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        fragment_group.setProperty("role", "phaseGroup")
         fragment_layout = QVBoxLayout(fragment_group)
         fragment_layout.setSpacing(8)
 
         # 子模块A: 片段索引生成器
         ndx_gen_group = QGroupBox("片段索引生成器 (make_ndx)")
-        ndx_gen_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #004D40;
-                margin-top: 4px; border: 1px solid #4DB6AC;
-                border-radius: 6px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        ndx_gen_group.setProperty("role", "toolCard")
         ndx_gen_layout = QGridLayout(ndx_gen_group)
         ndx_gen_layout.setSpacing(5)
 
@@ -602,13 +437,7 @@ class AnalysisTab(QWidget):
         self.ndx_gen_output = QLineEdit("fragment.ndx")
         ndx_gen_layout.addWidget(self.ndx_gen_output, 5, 1, 1, 2)
         self.ndx_gen_btn = QPushButton("生成片段索引文件")
-        self.ndx_gen_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #00838F; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #006064; }
-        """)
+        self.ndx_gen_btn.setProperty("role", "browseBtn")
         ndx_gen_layout.addWidget(self.ndx_gen_btn, 5, 3)
 
         self.ndx_add_row_btn.clicked.connect(lambda: self.ndx_gen_table.insertRow(self.ndx_gen_table.rowCount()))
@@ -621,16 +450,7 @@ class AnalysisTab(QWidget):
 
         # 子模块B: 片段-片段 RDF 分析
         rdf_frag_group = QGroupBox("片段-片段 RDF 分析")
-        rdf_frag_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #004D40;
-                margin-top: 4px; border: 1px solid #4DB6AC;
-                border-radius: 6px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        rdf_frag_group.setProperty("role", "toolCard")
         rdf_frag_layout = QGridLayout(rdf_frag_group)
         rdf_frag_layout.setSpacing(5)
 
@@ -689,13 +509,7 @@ class AnalysisTab(QWidget):
         rdf_frag_layout.addWidget(self.rdf_frag_outdir, 4, 1, 1, 2)
 
         self.rdf_frag_run_btn = QPushButton("批量计算片段RDF")
-        self.rdf_frag_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #00695C; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #004D40; }
-        """)
+        self.rdf_frag_run_btn.setProperty("role", "browseBtn")
         rdf_frag_layout.addWidget(self.rdf_frag_run_btn, 4, 3)
         self.rdf_frag_run_btn.clicked.connect(self.run_fragment_rdf_batch)
 
@@ -703,16 +517,7 @@ class AnalysisTab(QWidget):
 
         # 子模块C: 最近邻距离分析
         pairdist_group = QGroupBox("最近邻距离分析 (pairdist)")
-        pairdist_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #004D40;
-                margin-top: 4px; border: 1px solid #4DB6AC;
-                border-radius: 6px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        pairdist_group.setProperty("role", "toolCard")
         pairdist_layout = QGridLayout(pairdist_group)
         pairdist_layout.setSpacing(5)
 
@@ -736,13 +541,7 @@ class AnalysisTab(QWidget):
         pairdist_layout.addWidget(self.pairdist_out, 1, 3)
 
         self.pairdist_run_btn = QPushButton("计算最近邻距离")
-        self.pairdist_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #00695C; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #004D40; }
-        """)
+        self.pairdist_run_btn.setProperty("role", "browseBtn")
         pairdist_layout.addWidget(self.pairdist_run_btn, 2, 0, 1, 4)
         self.pairdist_run_btn.clicked.connect(self.run_pairdist_analysis)
 
@@ -751,21 +550,7 @@ class AnalysisTab(QWidget):
 
         # 7. 高级分析方法
         advanced_group = QGroupBox("📊 高级分析方法")
-        advanced_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #6A1B9A;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #7B1FA2;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        advanced_group.setProperty("role", "phaseGroup")
         advanced_layout = QVBoxLayout(advanced_group)
         advanced_layout.setSpacing(6)
 
@@ -779,20 +564,7 @@ class AnalysisTab(QWidget):
 
         for key, name, desc, default_out, color in advanced_analyses:
             grp = QGroupBox(f"{name}")
-            grp.setStyleSheet(f"""
-                QGroupBox {{
-                    font-weight: bold;
-                    color: #4A148C;
-                    margin-top: 4px;
-                    border: 1px solid #BA68C8;
-                    border-radius: 6px;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }}
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -803,16 +575,7 @@ class AnalysisTab(QWidget):
             ref_edit.setPlaceholderText("参考结构 (可选)")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: {self._adjust_brightness(color, 0.9)}; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -839,22 +602,13 @@ class AnalysisTab(QWidget):
 
         # 8. 结果自动绘图
         plot_group = QGroupBox("📈 结果自动绘图")
-        plot_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #AD1457;
-                margin-top: 8px; padding-top: 8px;
-                border: 2px solid #C2185B; border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        plot_group.setProperty("role", "phaseGroup")
         plot_layout = QVBoxLayout(plot_group)
         plot_layout.setSpacing(8)
 
         plot_desc = QLabel("自动读取xvg文件并生成符合期刊标准的科研图表")
         plot_desc.setWordWrap(True)
-        plot_desc.setStyleSheet("color: #880E4F; font-size: 11px;")
+        plot_desc.setProperty("role", "desc")
         plot_layout.addWidget(plot_desc)
 
         plot_grid = QGridLayout()
@@ -896,13 +650,7 @@ class AnalysisTab(QWidget):
         plot_layout.addLayout(plot_grid)
 
         self.plot_run_btn = QPushButton("生成图表")
-        self.plot_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #C2185B; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #880E4F; }
-        """)
+        self.plot_run_btn.setProperty("role", "browseBtn")
         self.plot_run_btn.clicked.connect(self.generate_plot)
         plot_layout.addWidget(self.plot_run_btn)
 
@@ -910,22 +658,13 @@ class AnalysisTab(QWidget):
 
         # 9. 能量分解分析
         energy_decomp_group = QGroupBox("⚡ 能量分解分析")
-        energy_decomp_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #5D4037;
-                margin-top: 8px; padding-top: 8px;
-                border: 2px solid #795548; border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        energy_decomp_group.setProperty("role", "phaseGroup")
         energy_decomp_layout = QVBoxLayout(energy_decomp_group)
         energy_decomp_layout.setSpacing(8)
 
         energy_decomp_desc = QLabel("提取并分解能量项，分析组分间相互作用")
         energy_decomp_desc.setWordWrap(True)
-        energy_decomp_desc.setStyleSheet("color: #3E2723; font-size: 11px;")
+        energy_decomp_desc.setProperty("role", "desc")
         energy_decomp_layout.addWidget(energy_decomp_desc)
 
         ed_grid = QGridLayout()
@@ -948,13 +687,7 @@ class AnalysisTab(QWidget):
         energy_decomp_layout.addLayout(ed_grid)
 
         self.ed_run_btn = QPushButton("提取能量数据")
-        self.ed_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #795548; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #5D4037; }
-        """)
+        self.ed_run_btn.setProperty("role", "browseBtn")
         self.ed_run_btn.clicked.connect(self.run_energy_decomposition)
         energy_decomp_layout.addWidget(self.ed_run_btn)
 
@@ -962,22 +695,13 @@ class AnalysisTab(QWidget):
 
         # 10. 批量处理系统
         batch_group = QGroupBox("📦 批量处理系统")
-        batch_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #BF360C;
-                margin-top: 8px; padding-top: 8px;
-                border: 2px solid #E64A19; border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        batch_group.setProperty("role", "phaseGroup")
         batch_layout = QVBoxLayout(batch_group)
         batch_layout.setSpacing(8)
 
         batch_desc = QLabel("同时处理多个模拟体系的数据，自动执行全套分析流程")
         batch_desc.setWordWrap(True)
-        batch_desc.setStyleSheet("color: #BF360C; font-size: 11px;")
+        batch_desc.setProperty("role", "desc")
         batch_layout.addWidget(batch_desc)
 
         batch_grid = QGridLayout()
@@ -1016,13 +740,7 @@ class AnalysisTab(QWidget):
         batch_grid.addWidget(self.batch_flow, 2, 1, 1, 2)
 
         self.batch_run_btn = QPushButton("开始批量处理")
-        self.batch_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #E64A19; color: white; font-weight: bold;
-                padding: 4px 12px; border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #BF360C; }
-        """)
+        self.batch_run_btn.setProperty("role", "browseBtn")
         batch_grid.addWidget(self.batch_run_btn, 2, 3)
 
         batch_layout.addLayout(batch_grid)

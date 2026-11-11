@@ -33,7 +33,6 @@ from simulation.md_runner import (
 )
 from gui.embedded_scripts import DELETE_SOLVENT_SCRIPT, DELETE_ADDITIVE_SCRIPT
 
-
 class MdTab(QWidget):
     """Part 1: 分子动力学全流程模拟独立页面组件
 
@@ -85,18 +84,7 @@ class MdTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #455A64;
-            }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(line_edit, dialog_title, filter_str))
         layout.addWidget(line_edit, stretch=1)
         layout.addWidget(btn)
@@ -118,7 +106,6 @@ class MdTab(QWidget):
 
         # 1. 全局模拟参数
         common_group = QGroupBox("全局模拟参数")
-        common_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
         ggrid = QGridLayout(common_group)
         ggrid.setSpacing(6)
 
@@ -356,21 +343,7 @@ class MdTab(QWidget):
 
         # === 第一阶段: 结构准备 ===
         prep_phase = QGroupBox("📦 第一阶段: 结构准备 (Step 1-4)")
-        prep_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #6A1B9A;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #7B1FA2;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        prep_phase.setProperty("role", "phaseGroup")
         prep_layout = QVBoxLayout(prep_phase)
         prep_layout.setSpacing(6)
 
@@ -384,12 +357,12 @@ class MdTab(QWidget):
         prep_layout.addWidget(step1)
 
         self.step1_existing = QGroupBox("Step 1: 使用已有拓扑")
-        self.step1_existing.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; margin-top: 8px; }")
+        self.step1_existing.setProperty("role", "toolCard")
         self.step1_existing.setVisible(False)
         se_layout = QGridLayout(self.step1_existing)
         se_layout.setSpacing(6)
         desc_se = QLabel("直接使用已有的结构和拓扑文件，跳过pdb2gmx")
-        desc_se.setStyleSheet("color: #555;")
+        desc_se.setProperty("role", "desc")
         se_layout.addWidget(desc_se, 0, 0, 1, 4)
 
         se_layout.addWidget(QLabel("输入结构:"), 1, 0)
@@ -401,10 +374,7 @@ class MdTab(QWidget):
         se_layout.addLayout(se_top_layout, 2, 1, 1, 3)
 
         self.se_run_btn = QPushButton("确认使用已有拓扑")
-        self.se_run_btn.setStyleSheet(
-            "QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 4px 12px; }"
-            "QPushButton:hover { background-color: #1976D2; }"
-        )
+        self.se_run_btn.setProperty("role", "actionBtn")
         self.se_run_btn.clicked.connect(lambda: self.run_md_step("Step 1"))
         se_layout.addWidget(self.se_run_btn, 3, 0, 1, 4)
 
@@ -438,21 +408,7 @@ class MdTab(QWidget):
 
         # === 第二阶段: 能量最小化 ===
         em_phase = QGroupBox("⚡ 第二阶段: 能量最小化 (Step 5-6)")
-        em_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #E65100;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #EF6C00;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        em_phase.setProperty("role", "phaseGroup")
         em_layout = QVBoxLayout(em_phase)
         em_layout.setSpacing(6)
 
@@ -476,21 +432,7 @@ class MdTab(QWidget):
 
         # === 第三阶段: 平衡模拟 ===
         equil_phase = QGroupBox("⚖️ 第三阶段: 平衡模拟 (Step 7-10)")
-        equil_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #00695C;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #00796B;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        equil_phase.setProperty("role", "phaseGroup")
         equil_layout = QVBoxLayout(equil_phase)
         equil_layout.setSpacing(6)
 
@@ -530,21 +472,7 @@ class MdTab(QWidget):
 
         # === 第四阶段: 生产模拟 ===
         prod_phase = QGroupBox("🚀 第四阶段: 生产模拟 (Step 11-12)")
-        prod_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #1565C0;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #1976D2;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        prod_phase.setProperty("role", "phaseGroup")
         prod_layout = QVBoxLayout(prod_phase)
         prod_layout.setSpacing(6)
 
@@ -568,21 +496,7 @@ class MdTab(QWidget):
 
         # === 第五阶段: 溶剂/添加剂蒸发 ===
         evap_phase = QGroupBox("🔥 第五阶段: 溶剂/添加剂蒸发")
-        evap_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #BF360C;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #D84315;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        evap_phase.setProperty("role", "phaseGroup")
         evap_layout = QVBoxLayout(evap_phase)
         evap_layout.setSpacing(8)
 
@@ -663,22 +577,12 @@ class MdTab(QWidget):
         evap_layout.addWidget(evap_config)
 
         tip = QLabel("💡 分批蒸发: 每轮删除N个溶剂分子后跑10ps NPT，循环指定轮数\n💡 删除全部添加剂: 一次性删除所有指定残基分子后跑NPT")
-        tip.setStyleSheet("color: #666; font-size: 11px;")
+        tip.setProperty("role", "desc")
         tip.setWordWrap(True)
         evap_layout.addWidget(tip)
 
         self.evap_run_btn = QPushButton("🚀 开始蒸发")
-        self.evap_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #D84315;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-size: 12pt;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #BF360C; }
-        """)
+        self.evap_run_btn.setProperty("role", "browseBtn")
         self.evap_run_btn.clicked.connect(self.run_evap_step)
         evap_layout.addWidget(self.evap_run_btn)
 
@@ -686,21 +590,7 @@ class MdTab(QWidget):
 
         # === 第六阶段: 退火模拟 ===
         anneal_phase = QGroupBox("🌡️ 第六阶段: 退火模拟 (Simulated Annealing)")
-        anneal_phase.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #4A148C;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #6A1B9A;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        anneal_phase.setProperty("role", "phaseGroup")
         anneal_layout = QVBoxLayout(anneal_phase)
         anneal_layout.setSpacing(8)
 
@@ -726,7 +616,7 @@ class MdTab(QWidget):
         anneal_grid.addWidget(self.anneal_mode, 2, 3)
 
         curve_label = QLabel("退火曲线 (时间-温度点对):")
-        curve_label.setStyleSheet("font-weight: bold; color: #4A148C;")
+        curve_label.setProperty("role", "desc")
         anneal_grid.addWidget(curve_label, 3, 0, 1, 4)
 
         self.anneal_table = QTableWidget(7, 2)
@@ -742,17 +632,17 @@ class MdTab(QWidget):
 
         table_btn_layout = QHBoxLayout()
         add_row_btn = QPushButton("+ 添加行")
-        add_row_btn.setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 3px 10px; border-radius: 4px; } QPushButton:hover { background-color: #388E3C; }")
+        add_row_btn.setProperty("role", "secondaryTool")
         add_row_btn.clicked.connect(lambda: self.anneal_table.insertRow(self.anneal_table.rowCount()))
         table_btn_layout.addWidget(add_row_btn)
 
         del_row_btn = QPushButton("- 删除选中行")
-        del_row_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; padding: 3px 10px; border-radius: 4px; } QPushButton:hover { background-color: #d32f2f; }")
+        del_row_btn.setProperty("role", "secondaryTool")
         del_row_btn.clicked.connect(lambda: self.anneal_table.removeRow(self.anneal_table.currentRow()) if self.anneal_table.currentRow() >= 0 else None)
         table_btn_layout.addWidget(del_row_btn)
 
         reset_curve_btn = QPushButton("↻ 重置默认曲线")
-        reset_curve_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; padding: 3px 10px; border-radius: 4px; } QPushButton:hover { background-color: #F57C00; }")
+        reset_curve_btn.setProperty("role", "secondaryTool")
         reset_curve_btn.clicked.connect(self._reset_anneal_curve)
         table_btn_layout.addWidget(reset_curve_btn)
 
@@ -760,24 +650,14 @@ class MdTab(QWidget):
         anneal_grid.addLayout(table_btn_layout, 5, 0, 1, 4)
 
         curve_tip = QLabel("💡 默认曲线: 300K → 373K (保温) → 300K，模拟1ns\n💡 时间点必须递增，点数需与温度点数一致\n💡 生成MDP后会自动执行 grompp + mdrun")
-        curve_tip.setStyleSheet("color: #666; font-size: 11px;")
+        curve_tip.setProperty("role", "desc")
         curve_tip.setWordWrap(True)
         anneal_grid.addWidget(curve_tip, 6, 0, 1, 4)
 
         anneal_layout.addWidget(anneal_config)
 
         self.anneal_run_btn = QPushButton("🚀 开始退火模拟")
-        self.anneal_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6A1B9A;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-size: 12pt;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #4A148C; }
-        """)
+        self.anneal_run_btn.setProperty("role", "browseBtn")
         self.anneal_run_btn.clicked.connect(self.run_anneal_step)
         anneal_layout.addWidget(self.anneal_run_btn)
 
@@ -805,12 +685,12 @@ class MdTab(QWidget):
     def _create_editconf_step(self):
         title = "Step 2: 定义模拟盒子 (editconf)"
         group = QGroupBox(title)
-        group.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; margin-top: 8px; }")
+        group.setProperty("role", "toolCard")
         layout = QGridLayout(group)
         layout.setSpacing(6)
 
         desc = QLabel("设置模拟盒子类型和大小")
-        desc.setStyleSheet("color: #555;")
+        desc.setProperty("role", "desc")
         layout.addWidget(desc, 0, 0, 1, 4)
 
         row = 1
@@ -821,16 +701,7 @@ class MdTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover { background-color: #455A64; }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(input_gro_edit, "选择结构文件", "结构文件 (*.gro *.pdb);;所有文件 (*.*)"))
         hlayout.addWidget(btn)
         layout.addLayout(hlayout, row, 1, 1, 3)
@@ -843,16 +714,7 @@ class MdTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover { background-color: #455A64; }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(output_gro_edit, "保存结构文件", "结构文件 (*.gro *.pdb);;所有文件 (*.*)"))
         hlayout.addWidget(btn)
         layout.addLayout(hlayout, row, 1, 1, 3)
@@ -1008,10 +870,7 @@ class MdTab(QWidget):
         size_mode_combo.currentTextChanged.connect(_on_size_mode_changed)
 
         run_btn = QPushButton("运行此步骤")
-        run_btn.setStyleSheet(
-            "QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 4px 12px; }"
-            "QPushButton:hover { background-color: #1976D2; }"
-        )
+        run_btn.setProperty("role", "actionBtn")
         layout.addWidget(run_btn, row, 0, 1, 2)
         row += 1
 
@@ -1039,12 +898,12 @@ class MdTab(QWidget):
 
     def _create_step_group(self, title, description, labels, defaults):
         group = QGroupBox(title)
-        group.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; margin-top: 8px; }")
+        group.setProperty("role", "toolCard")
         layout = QGridLayout(group)
         layout.setSpacing(6)
 
         desc = QLabel(description)
-        desc.setStyleSheet("color: #555;")
+        desc.setProperty("role", "desc")
         layout.addWidget(desc, 0, 0, 1, 4)
 
         def _file_filter_for_label(lbl):
@@ -1084,26 +943,14 @@ class MdTab(QWidget):
             btn = QPushButton("浏览")
             btn.setFixedWidth(55)
             btn.setToolTip("浏览文件")
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #546E7A;
-                    color: white;
-                    padding: 3px 8px;
-                    border-radius: 4px;
-                    font-size: 11px;
-                }
-                QPushButton:hover { background-color: #455A64; }
-            """)
+            btn.setProperty("role", "browseBtn")
             btn.clicked.connect(lambda checked=False, edit=le, ft=ftitle, ff=ffilter: self._browse_file(edit, ft, ff))
             hlayout.addWidget(btn)
             layout.addLayout(hlayout, row, 1, 1, 3)
             row += 1
 
         run_btn = QPushButton("运行此步骤")
-        run_btn.setStyleSheet(
-            "QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 5px 14px; min-height: 28px; }"
-            "QPushButton:hover { background-color: #1976D2; }"
-        )
+        run_btn.setProperty("role", "actionBtn")
         layout.addWidget(run_btn, row, 0, 1, 2)
 
         if any("MDP" in l for l in labels):
@@ -1118,18 +965,12 @@ class MdTab(QWidget):
                 mdp_type_key = "md"
 
             mdp_btn = QPushButton("生成默认MDP")
-            mdp_btn.setStyleSheet(
-                "QPushButton { background-color: #FF9800; color: white; padding: 5px 14px; min-height: 28px; }"
-                "QPushButton:hover { background-color: #F57C00; }"
-            )
+            mdp_btn.setProperty("role", "secondaryTool")
             mdp_btn.clicked.connect(lambda checked=False, t=mdp_type_key: self.generate_mdp_template(t))
             layout.addWidget(mdp_btn, row, 2)
 
             adv_mdp_btn = QPushButton("高级编辑器")
-            adv_mdp_btn.setStyleSheet(
-                "QPushButton { background-color: #9C27B0; color: white; padding: 5px 14px; min-height: 28px; }"
-                "QPushButton:hover { background-color: #7B1FA2; }"
-            )
+            adv_mdp_btn.setProperty("role", "secondaryTool")
             adv_mdp_btn.clicked.connect(lambda checked=False, t=mdp_type_key: self._open_mdp_editor(t))
             adv_mdp_btn.setToolTip("打开高级MDP参数可视化编辑器")
             layout.addWidget(adv_mdp_btn, row, 3)

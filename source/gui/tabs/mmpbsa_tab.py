@@ -57,12 +57,11 @@ class MmpbsaTab(QWidget):
             "结合自由能计算。\n请确保已安装 gmx_MMPBSA 或相关脚本。"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
+        info.setProperty("role", "desc")
         vbox.addWidget(info)
 
         # 1. 输入文件参数
         inp_group = QGroupBox("输入文件参数")
-        inp_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
         igrid = QGridLayout(inp_group)
 
         self.mmpbsa_tpr = QLineEdit("md.tpr")
@@ -84,7 +83,6 @@ class MmpbsaTab(QWidget):
 
         # 2. 采样与计算参数
         sam_group = QGroupBox("采样与计算参数")
-        sam_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; }")
         sgrid = QGridLayout(sam_group)
 
         self.mmpbsa_start = QDoubleSpinBox()
@@ -123,7 +121,6 @@ class MmpbsaTab(QWidget):
 
         # 3. 结果图片输出设置
         img_group = QGroupBox("结果图片输出设置")
-        img_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E65100; }")
         imgrid = QGridLayout(img_group)
 
         self.mmpbsa_fmt = QComboBox()
@@ -153,11 +150,9 @@ class MmpbsaTab(QWidget):
 
         # 4. 运行按钮
         run_layout = QHBoxLayout()
-        self.mmpbsa_run_btn = QPushButton("运行 MMPBSA 计算")
-        self.mmpbsa_run_btn.setStyleSheet(
-            "QPushButton { background-color: #9C27B0; color: white; font-weight: bold; font-size: 14px; padding: 10px 24px; }"
-            "QPushButton:hover { background-color: #7B1FA2; }"
-        )
+        self.mmpbsa_run_btn = QPushButton("▶ 运行 MMPBSA 计算")
+        self.mmpbsa_run_btn.setProperty("role", "primaryRun")
+        self.mmpbsa_run_btn.setMinimumHeight(34)
         self.mmpbsa_run_btn.clicked.connect(self.run_mmpbsa)
         run_layout.addStretch()
         run_layout.addWidget(self.mmpbsa_run_btn)

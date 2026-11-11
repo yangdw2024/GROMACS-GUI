@@ -21,7 +21,6 @@ from PyQt5.QtWidgets import (
 
 from simulation.analysis import build_structure_tool_command
 
-
 class StructureTab(QWidget):
     """Part 2: 结构处理工具独立页面组件
 
@@ -67,18 +66,7 @@ class StructureTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #455A64;
-            }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(line_edit, dialog_title, filter_str))
         layout.addWidget(line_edit, stretch=1)
         layout.addWidget(btn)
@@ -100,7 +88,6 @@ class StructureTab(QWidget):
 
         # 通用参数
         common_group = QGroupBox("结构处理参数")
-        common_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
         cgrid = QGridLayout(common_group)
 
         self.struc_input, struc_input_layout = self._create_file_input(
@@ -121,41 +108,13 @@ class StructureTab(QWidget):
 
         # === 第一组: 核心结构准备 ===
         prep_group = QGroupBox("🔧 核心结构准备")
-        prep_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #E65100;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #E65100;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        prep_group.setProperty("role", "phaseGroup")
         prep_layout = QVBoxLayout(prep_group)
         prep_layout.setSpacing(8)
 
         # 创建索引 (gmx make_ndx)
         ndx_grp = QGroupBox("📌 创建索引文件 (gmx make_ndx)")
-        ndx_grp.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #BF360C;
-                margin-top: 6px;
-                border: 1px solid #FF8A65;
-                border-radius: 6px;
-                background-color: rgba(255, 138, 101, 0.1);
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        ndx_grp.setProperty("role", "toolCard")
         ndx_g = QGridLayout(ndx_grp)
         ndx_g.addWidget(QLabel("创建索引文件，用于后续模拟和分析中选择特定原子组"), 0, 0, 1, 4)
 
@@ -164,17 +123,7 @@ class StructureTab(QWidget):
         ndx_opt_edit.setPlaceholderText("如 -select 'resname ALA'")
 
         ndx_run_btn = QPushButton("运行创建索引")
-        ndx_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #E65100;
-                color: white;
-                font-weight: bold;
-                padding: 6px 16px;
-                border-radius: 6px;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #BF360C; }
-        """)
+        ndx_run_btn.setProperty("role", "browseBtn")
 
         ndx_struc_edit, ndx_struc_layout = self._create_file_input(
             "input.gro", "", "结构文件 (*.gro *.pdb);;所有文件 (*.*)", "选择输入结构"
@@ -196,17 +145,7 @@ class StructureTab(QWidget):
         ]
         for btn_name, select_expr in ndx_btns:
             btn = QPushButton(btn_name)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #FF8A65;
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 10px;
-                    border-radius: 4px;
-                    font-size: 12px;
-                }
-                QPushButton:hover { background-color: #FF7043; }
-            """)
+            btn.setProperty("role", "browseBtn")
             btn.clicked.connect(lambda checked=False, expr=select_expr: ndx_opt_edit.setText(expr))
             ndx_btn_layout.addWidget(btn)
         ndx_g.addLayout(ndx_btn_layout, 2, 1, 1, 3)
@@ -215,16 +154,7 @@ class StructureTab(QWidget):
         ndx_custom_edit = QLineEdit()
         ndx_custom_edit.setPlaceholderText("如 -select 'resname ALA' 或 -select 'index 0'")
         ndx_apply_btn = QPushButton("应用")
-        ndx_apply_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FF8A65;
-                color: white;
-                font-weight: bold;
-                padding: 4px 10px;
-                border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #FF7043; }
-        """)
+        ndx_apply_btn.setProperty("role", "browseBtn")
         ndx_apply_btn.clicked.connect(lambda: ndx_opt_edit.setText(ndx_custom_edit.text()))
         ndx_g.addWidget(ndx_custom_edit, 3, 1, 1, 2)
         ndx_g.addWidget(ndx_apply_btn, 3, 3)
@@ -252,20 +182,7 @@ class StructureTab(QWidget):
 
         for key, name, desc, default_out, color in prep_tools:
             grp = QGroupBox(name)
-            grp.setStyleSheet("""
-                QGroupBox {
-                    font-weight: bold;
-                    color: #00695C;
-                    margin-top: 4px;
-                    border: 1px solid #4DB6AC;
-                    border-radius: 6px;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -274,16 +191,7 @@ class StructureTab(QWidget):
             opt_edit.setPlaceholderText("额外命令行选项 (可选)")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: #004D40; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -303,21 +211,7 @@ class StructureTab(QWidget):
 
         # === 第二组: 结构转换与验证 ===
         convert_group = QGroupBox("🔄 结构转换与验证")
-        convert_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                color: #1565C0;
-                margin-top: 8px;
-                padding-top: 8px;
-                border: 2px solid #1976D2;
-                border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+        convert_group.setProperty("role", "phaseGroup")
         convert_layout = QVBoxLayout(convert_group)
         convert_layout.setSpacing(8)
 
@@ -329,20 +223,7 @@ class StructureTab(QWidget):
 
         for key, name, desc, default_out, color in convert_tools:
             grp = QGroupBox(name)
-            grp.setStyleSheet("""
-                QGroupBox {
-                    font-weight: bold;
-                    color: #0D47A1;
-                    margin-top: 4px;
-                    border: 1px solid #64B5F6;
-                    border-radius: 6px;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 5px;
-                }
-            """)
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -352,16 +233,7 @@ class StructureTab(QWidget):
             opt_edit.setToolTip("高级用户可在此添加额外的GROMACS命令行参数\n例如：-box 10 10 10 设置盒子边长\n-rotate 90 0 0 旋转结构\n-translate 1 1 1 平移结构\n-center 居中结构")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-weight: bold;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                }}
-                QPushButton:hover {{ background-color: #0D47A1; }}
-            """)
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)
@@ -381,16 +253,7 @@ class StructureTab(QWidget):
 
         # 提示信息
         tip_label = QLabel("💡 提示：轨迹分析工具（RMSD/RMSF/SASA/氢键/RDF等）已移至 Part 5 结果分析")
-        tip_label.setStyleSheet("""
-            QLabel {
-                background-color: rgba(255, 193, 7, 0.15);
-                color: #F57C00;
-                padding: 8px 12px;
-                border-radius: 6px;
-                border: 1px solid #FFB74D;
-                font-weight: bold;
-            }
-        """)
+        tip_label.setProperty("role", "warningBanner")
         vbox.addWidget(tip_label)
         vbox.addStretch()
 

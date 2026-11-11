@@ -25,7 +25,6 @@ from simulation.analysis import (
     build_preprocessing_commands
 )
 
-
 class TrajectoryTab(QWidget):
     """Part 4: 轨迹处理与预处理流水线独立页面组件
 
@@ -71,18 +70,7 @@ class TrajectoryTab(QWidget):
         btn = QPushButton("浏览")
         btn.setFixedWidth(55)
         btn.setToolTip("浏览文件")
-        btn.setStyleSheet("""
-            QPushButton {
-                background-color: #546E7A;
-                color: white;
-                padding: 3px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-            }
-            QPushButton:hover {
-                background-color: #455A64;
-            }
-        """)
+        btn.setProperty("role", "browseBtn")
         btn.clicked.connect(lambda: self._browse_file(line_edit, dialog_title, filter_str))
         layout.addWidget(line_edit, stretch=1)
         layout.addWidget(btn)
@@ -104,7 +92,6 @@ class TrajectoryTab(QWidget):
 
         # 1. 通用参数区
         common_group = QGroupBox("轨迹处理参数")
-        common_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
         cgrid = QGridLayout(common_group)
 
         self.traj_input, traj_input_layout = self._create_file_input(
@@ -129,16 +116,7 @@ class TrajectoryTab(QWidget):
 
         # 2. 预处理流水线
         prep_group = QGroupBox("🔄 轨迹预处理流水线")
-        prep_group.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold; color: #1565C0;
-                margin-top: 8px; padding-top: 8px;
-                border: 2px solid #1976D2; border-radius: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin; left: 10px; padding: 0 5px;
-            }
-        """)
+        prep_group.setProperty("role", "phaseGroup")
         prep_layout = QVBoxLayout(prep_group)
         prep_layout.setSpacing(8)
 
@@ -146,7 +124,7 @@ class TrajectoryTab(QWidget):
             "标准预处理五步法：PBC修复 → 体系居中 → 去除平动/转动 → 截取平衡段 → 降采样精简"
         )
         prep_desc.setWordWrap(True)
-        prep_desc.setStyleSheet("color: #0D47A1; font-size: 11px;")
+        prep_desc.setProperty("role", "desc")
         prep_layout.addWidget(prep_desc)
 
         prep_grid = QGridLayout()
@@ -209,13 +187,7 @@ class TrajectoryTab(QWidget):
 
         # 运行按钮
         self.prep_run_btn = QPushButton("一键执行预处理流水线")
-        self.prep_run_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0; color: white; font-weight: bold;
-                padding: 6px 16px; border-radius: 4px; font-size: 12px;
-            }
-            QPushButton:hover { background-color: #0D47A1; }
-        """)
+        self.prep_run_btn.setProperty("role", "browseBtn")
         self.prep_run_btn.clicked.connect(self.run_preprocessing_pipeline)
         prep_layout.addWidget(self.prep_run_btn)
 
@@ -235,7 +207,7 @@ class TrajectoryTab(QWidget):
         self.traj_widgets = {}
         for key, name, desc, default_out in tools:
             grp = QGroupBox(f"{name}")
-            grp.setStyleSheet("QGroupBox { font-weight: bold; color: #311B92; margin-top: 4px; }")
+            grp.setProperty("role", "toolCard")
             g = QGridLayout(grp)
             g.addWidget(QLabel(desc), 0, 0, 1, 4)
 
@@ -244,10 +216,7 @@ class TrajectoryTab(QWidget):
             opt_edit.setPlaceholderText("如 -pbc mol -center -fit rot+trans")
 
             run_btn = QPushButton("运行")
-            run_btn.setStyleSheet(
-                "QPushButton { background-color: #5E35B1; color: white; font-weight: bold; padding: 4px 12px; }"
-                "QPushButton:hover { background-color: #512DA8; }"
-            )
+            run_btn.setProperty("role", "actionBtn")
 
             g.addWidget(QLabel("输出文件:"), 1, 0)
             g.addWidget(out_edit, 1, 1)

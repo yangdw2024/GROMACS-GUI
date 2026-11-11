@@ -1,40 +1,63 @@
 # -*- coding: utf-8 -*-
 """
-GROMACS-GUI 现代化视觉规范与双主题系统 (Design Tokens & QSS Engine)
-集中管理深色/浅色主题颜色、字体、间距、圆角与控件状态，
-采用 ID 与语义属性选择器 (setProperty("role", ...))，避免意外覆盖已有业务控件的独立样式。
+GROMACS-GUI 现代化视觉设计系统 (Design System & QSS Engine)
+集中管理深色/浅色主题的颜色、排版、圆角、间距及语义化组件样式，
+遵循克制、专业、高对比度科研桌面软件规范，彻底取代页面内硬编码的彩虹色与低对比度内联样式。
 """
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QPalette
+
+DESIGN_SYSTEM_META = {
+    "font_ui": '"Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif',
+    "font_mono": '"Consolas", "Cascadia Mono", "Courier New", monospace',
+    "radius_sm": 4,
+    "radius_md": 6,
+    "radius_lg": 8,
+    "space_xs": 4,
+    "space_sm": 8,
+    "space_md": 12,
+    "space_lg": 16,
+}
 
 DARK_TOKENS = {
     "name": "dark",
     "bg_app": "#0F172A",          # Slate 900 主背景
     "bg_surface": "#1E293B",      # Slate 800 面板/导航栏/顶栏背景
     "bg_elevated": "#263349",     # 悬浮/输入框/次级容器背景
+    "bg_card": "#192335",         # 子工具卡片底色
     "bg_console": "#090D16",      # 底部终端背景
     "bg_hover": "#334155",        # 悬停态背景
     "bg_active_nav": "#1D4ED8",   # 导航选中高亮底色
     "border": "#334155",          # 常规分隔边框
-    "border_subtle": "#1E293B",   # 弱边框
+    "border_subtle": "#243044",   # 弱边框
     "border_focus": "#3B82F6",    # 焦点高亮边框
-    "text_primary": "#F8FAFC",    # 主文字
-    "text_secondary": "#94A3B8",  # 次级说明文字
-    "text_muted": "#64748B",      # 占位/禁用文字
+    "border_phase": "#3B82F6",    # 阶段性主卡片点缀边框
+    "text_primary": "#F8FAFC",    # 主文字 (高对比度)
+    "text_secondary": "#CBD5E1",  # 次级说明文字 (Slate 300, 在深色底上清晰可读)
+    "text_muted": "#94A3B8",      # 占位/分组小标题
     "group_title": "#93C5FD",     # GroupBox 标题色
-    "primary": "#2563EB",         # 主品牌蓝
+    "primary": "#2563EB",         # 主品牌蓝 (Cobalt Blue)
     "primary_hover": "#3B82F6",
     "primary_pressed": "#1D4ED8",
-    "success": "#10B981",         # 运行/成功绿
+    "success": "#10B981",         # 运行/成功绿 (Emerald)
     "success_hover": "#059669",
-    "danger": "#EF4444",          # 停止/错误红
+    "danger": "#EF4444",          # 停止/错误红 (Rose)
     "danger_hover": "#DC2626",
     "warning": "#F59E0B",         # 警告琥珀色
+    "warning_bg": "rgba(245, 158, 11, 0.14)",
+    "warning_text": "#FCD34D",
+    "accent": "#0284C7",          # 辅助科研操作色 (Sky 600)
+    "accent_hover": "#0369A1",
+    "browse_bg": "#334155",
+    "browse_hover": "#475569",
     "badge_bg": "#1E3A8A",
     "badge_text": "#93C5FD",
     "badge_gpu_bg": "#064E3B",
     "badge_gpu_text": "#6EE7B7",
+    "table_header_bg": "#1E293B",
+    "scrollbar_bg": "#0F172A",
+    "scrollbar_handle": "#475569",
 }
 
 LIGHT_TOKENS = {
@@ -42,16 +65,18 @@ LIGHT_TOKENS = {
     "bg_app": "#F1F5F9",          # Slate 100 主背景
     "bg_surface": "#FFFFFF",      # 纯白面板/导航栏/顶栏背景
     "bg_elevated": "#F8FAFC",     # 表单输入框/次级容器背景
+    "bg_card": "#F8FAFC",         # 子工具卡片底色
     "bg_console": "#0F172A",      # 终端保持深色高对比度护眼风格
     "bg_hover": "#E2E8F0",        # 悬停态背景
     "bg_active_nav": "#EFF6FF",   # 导航选中浅蓝底
     "border": "#CBD5E1",          # 常规分隔边框
     "border_subtle": "#E2E8F0",   # 弱边框
     "border_focus": "#2563EB",    # 焦点高亮边框
-    "text_primary": "#0F172A",    # 主文字
-    "text_secondary": "#475569",  # 次级说明文字
-    "text_muted": "#94A3B8",      # 占位/禁用文字
-    "group_title": "#0D47A1",     # GroupBox 标题色
+    "border_phase": "#2563EB",    # 阶段性主卡片点缀边框
+    "text_primary": "#0F172A",    # 主文字 (Slate 900)
+    "text_secondary": "#475569",  # 次级说明文字 (Slate 600)
+    "text_muted": "#64748B",      # 占位/分组小标题
+    "group_title": "#1E40AF",     # GroupBox 标题色 (Blue 800)
     "primary": "#2563EB",         # 主品牌蓝
     "primary_hover": "#1D4ED8",
     "primary_pressed": "#1E40AF",
@@ -60,10 +85,19 @@ LIGHT_TOKENS = {
     "danger": "#DC2626",          # 停止/错误红
     "danger_hover": "#B91C1C",
     "warning": "#D97706",         # 警告橙
+    "warning_bg": "rgba(245, 158, 11, 0.12)",
+    "warning_text": "#92400E",
+    "accent": "#0284C7",          # 辅助科研操作色
+    "accent_hover": "#0369A1",
+    "browse_bg": "#475569",
+    "browse_hover": "#334155",
     "badge_bg": "#DBEAFE",
     "badge_text": "#1E40AF",
     "badge_gpu_bg": "#D1FAE5",
     "badge_gpu_text": "#065F46",
+    "table_header_bg": "#F1F5F9",
+    "scrollbar_bg": "#F1F5F9",
+    "scrollbar_handle": "#94A3B8",
 }
 
 
@@ -104,7 +138,7 @@ def build_palette(tokens: dict) -> QPalette:
 
 
 def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
-    """构建现代化主窗口外壳与基础控件样式表"""
+    """构建现代化主窗口外壳与全套语义化组件样式表"""
     def px(val: int) -> str:
         return f"{max(1, int(round(val * scale)))}px"
 
@@ -114,6 +148,8 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
     t = tokens
     nav_active_fg = "#FFFFFF" if t["name"] == "dark" else "#1D4ED8"
     nav_active_border = "#60A5FA" if t["name"] == "dark" else "#2563EB"
+    font_ui = DESIGN_SYSTEM_META["font_ui"]
+    font_mono = DESIGN_SYSTEM_META["font_mono"]
 
     return f"""
     QMainWindow {{
@@ -122,12 +158,16 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
     }}
     QWidget {{
         color: {t["text_primary"]};
-        font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+        font-family: {font_ui};
     }}
 
-    /* ==================== 顶部简洁状态栏与可展开硬件抽屉 ==================== */
+    /* ==================== 顶部双层工作台状态与操作栏 ==================== */
     QFrame#topHeaderBar {{
         background-color: {t["bg_surface"]};
+        border-bottom: {px(1)} solid {t["border_subtle"]};
+    }}
+    QFrame#workdirBar {{
+        background-color: {t["bg_elevated"]};
         border-bottom: {px(1)} solid {t["border"]};
     }}
     QFrame#sysConfigDrawer {{
@@ -136,7 +176,7 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
     }}
     QLabel#brandTitle {{
         color: {t["text_primary"]};
-        font-size: {pt(11.5)};
+        font-size: {pt(11)};
         font-weight: bold;
     }}
     QLabel#brandSubtitle {{
@@ -186,7 +226,7 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         border-left: {px(3)} solid transparent;
         border-radius: {px(5)};
         text-align: left;
-        padding: {px(7)} {px(10)};
+        padding: {px(5)} {px(10)};
         font-size: {pt(9)};
         font-weight: 600;
     }}
@@ -201,7 +241,7 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         font-weight: bold;
     }}
 
-    /* ==================== 语义化主控按钮 ==================== */
+    /* ==================== 语义化主控与操作按钮 ==================== */
     QPushButton[role="primaryRun"] {{
         background-color: {t["success"]};
         color: #FFFFFF;
@@ -235,7 +275,7 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         color: {t["text_muted"]};
         border: {px(1)} solid {t["border"]};
     }}
-    QPushButton[role="secondaryTool"] {{
+    QPushButton[role="secondaryTool"], QToolButton[role="secondaryTool"] {{
         background-color: {t["bg_elevated"]};
         color: {t["text_primary"]};
         border: {px(1)} solid {t["border"]};
@@ -244,9 +284,62 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         min-height: {px(24)};
         font-weight: 600;
     }}
-    QPushButton[role="secondaryTool"]:hover {{
+    QPushButton[role="secondaryTool"]:hover, QToolButton[role="secondaryTool"]:hover {{
         background-color: {t["bg_hover"]};
         border-color: {t["border_focus"]};
+    }}
+    QPushButton[role="actionBtn"] {{
+        background-color: {t["primary"]};
+        color: #FFFFFF;
+        border: none;
+        border-radius: {px(5)};
+        padding: {px(5)} {px(14)};
+        min-height: {px(24)};
+        font-weight: bold;
+    }}
+    QPushButton[role="actionBtn"]:hover {{
+        background-color: {t["primary_hover"]};
+    }}
+    QPushButton[role="actionBtn"]:disabled {{
+        background-color: {t["bg_elevated"]};
+        color: {t["text_muted"]};
+    }}
+    QPushButton[role="accentBtn"] {{
+        background-color: {t["accent"]};
+        color: #FFFFFF;
+        border: none;
+        border-radius: {px(5)};
+        padding: {px(5)} {px(14)};
+        min-height: {px(24)};
+        font-weight: bold;
+    }}
+    QPushButton[role="accentBtn"]:hover {{
+        background-color: {t["accent_hover"]};
+    }}
+    QPushButton[role="browseBtn"] {{
+        background-color: {t["browse_bg"]};
+        color: #FFFFFF;
+        border: none;
+        border-radius: {px(4)};
+        padding: {px(3)} {px(8)};
+        font-size: {pt(8.5)};
+    }}
+    QPushButton[role="browseBtn"]:hover {{
+        background-color: {t["browse_hover"]};
+    }}
+
+    /* ==================== 语义化提示标签与文本 ==================== */
+    QLabel[role="hint"], QLabel[role="desc"] {{
+        color: {t["text_secondary"]};
+        font-size: {pt(8.5)};
+    }}
+    QLabel[role="warningBanner"] {{
+        background-color: {t["warning_bg"]};
+        color: {t["warning_text"]};
+        padding: {px(8)} {px(12)};
+        border-radius: {px(6)};
+        border: {px(1)} solid {t["warning"]};
+        font-weight: bold;
     }}
 
     /* ==================== 基础表单与容器样式（限定在主窗口与其容器内部） ==================== */
@@ -257,6 +350,20 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         border: {px(1)} solid {t["border"]};
         border-radius: {px(6)};
         margin-top: {px(10)};
+        padding-top: {px(10)};
+    }}
+    QMainWindow QGroupBox[role="phaseGroup"], QWidget#rootWidget QGroupBox[role="phaseGroup"] {{
+        background-color: {t["bg_surface"]};
+        border: {px(1)} solid {t["border_phase"]};
+        border-radius: {px(8)};
+        margin-top: {px(12)};
+        padding-top: {px(12)};
+    }}
+    QMainWindow QGroupBox[role="toolCard"], QWidget#rootWidget QGroupBox[role="toolCard"] {{
+        background-color: {t["bg_card"]};
+        border: {px(1)} solid {t["border_subtle"]};
+        border-radius: {px(6)};
+        margin-top: {px(8)};
         padding-top: {px(8)};
     }}
     QMainWindow QGroupBox::title, QWidget#rootWidget QGroupBox::title {{
@@ -318,6 +425,28 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         color: {t["text_primary"]};
         border: {px(1)} solid {t["border"]};
         border-radius: {px(4)};
+        gridline-color: {t["border_subtle"]};
+    }}
+    QHeaderView::section {{
+        background-color: {t["table_header_bg"]};
+        color: {t["text_primary"]};
+        padding: {px(4)} {px(6)};
+        border: none;
+        border-bottom: {px(1)} solid {t["border"]};
+        font-weight: bold;
+    }}
+    QScrollBar:vertical {{
+        background: {t["scrollbar_bg"]};
+        width: {px(8)};
+        margin: 0px;
+    }}
+    QScrollBar::handle:vertical {{
+        background: {t["scrollbar_handle"]};
+        min-height: {px(24)};
+        border-radius: {px(4)};
+    }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+        height: 0px;
     }}
 
     /* ==================== 底部可折叠日志与监控抽屉 ==================== */
@@ -329,11 +458,11 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
         background-color: {t["bg_elevated"]};
         border-bottom: {px(1)} solid {t["border"]};
     }}
-    QTextEdit#consoleLogView {{
+    QMainWindow QTextEdit#consoleLogView, QWidget#rootWidget QTextEdit#consoleLogView, QTextEdit#consoleLogView {{
         background-color: {t["bg_console"]};
         color: #E2E8F0;
         border: none;
-        font-family: "Consolas", "Cascadia Mono", monospace;
+        font-family: {font_mono};
     }}
     QProgressBar {{
         background-color: {t["bg_elevated"]};
@@ -345,6 +474,15 @@ def build_shell_stylesheet(tokens: dict, scale: float = 1.0) -> str:
     QProgressBar::chunk {{
         background-color: {t["primary"]};
         border-radius: {px(3)};
+    }}
+    QMenu {{
+        background-color: {t["bg_surface"]};
+        color: {t["text_primary"]};
+        border: {px(1)} solid {t["border"]};
+    }}
+    QMenu::item:selected {{
+        background-color: {t["primary"]};
+        color: #FFFFFF;
     }}
     QToolTip {{
         background-color: {t["bg_surface"]};
