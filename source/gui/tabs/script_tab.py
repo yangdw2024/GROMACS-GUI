@@ -60,7 +60,7 @@ class ScriptTab(QWidget):
             "提示: 脚本会在工作目录下执行，可使用 $env:GMX 或 %GMX% 获取gmx路径。"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
+        info.setProperty("role", "desc")
         layout.addWidget(info)
 
         # 1. 顶部工具栏
@@ -73,16 +73,16 @@ class ScriptTab(QWidget):
         toolbar.addWidget(self.script_type)
 
         self.script_save_btn = QPushButton("保存脚本")
+        self.script_save_btn.setProperty("role", "secondaryTool")
         self.script_save_btn.clicked.connect(self.save_script)
         self.script_load_btn = QPushButton("加载脚本")
+        self.script_load_btn.setProperty("role", "secondaryTool")
         self.script_load_btn.clicked.connect(self.load_script)
         self.script_clear_btn = QPushButton("清空")
+        self.script_clear_btn.setProperty("role", "secondaryTool")
         self.script_clear_btn.clicked.connect(self.clear_editor)
         self.script_run_btn = QPushButton("▶ 运行脚本")
-        self.script_run_btn.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #45a049; }"
-        )
+        self.script_run_btn.setProperty("role", "primaryRun")
         self.script_run_btn.clicked.connect(self.run_script)
 
         toolbar.addStretch(1)
@@ -94,7 +94,6 @@ class ScriptTab(QWidget):
 
         # 2. 脚本编辑器
         script_group = QGroupBox("脚本编辑")
-        script_group.setStyleSheet("QGroupBox { font-weight: bold; color: #6A1B9A; }")
         sg_layout = QVBoxLayout(script_group)
 
         self.script_edit = QPlainTextEdit()
@@ -114,7 +113,6 @@ class ScriptTab(QWidget):
 
         # 3. 快速模板区
         self.tmpl_group = QGroupBox("快速模板")
-        self.tmpl_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E65100; }")
         tmpl_layout = QVBoxLayout(self.tmpl_group)
 
         tmpl_row1 = QHBoxLayout()
@@ -164,10 +162,7 @@ class ScriptTab(QWidget):
         tmpl_btn14.clicked.connect(lambda: self.load_script_template("clffcl_evapdio"))
 
         self.tmpl_btn_manage = QPushButton("管理自定义模板")
-        self.tmpl_btn_manage.setStyleSheet(
-            "QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #7B1FA2; }"
-        )
+        self.tmpl_btn_manage.setProperty("role", "accentBtn")
         self.tmpl_btn_manage.clicked.connect(self.manage_templates)
 
         self.tmpl_row3.addWidget(tmpl_btn11)
@@ -196,10 +191,7 @@ class ScriptTab(QWidget):
                     custom_templates = json.load(f)
                 for template in custom_templates:
                     btn = QPushButton(template["name"])
-                    btn.setStyleSheet(
-                        "QPushButton { background-color: #7E57C2; color: white; font-weight: bold; padding: 6px 12px; }"
-                        "QPushButton:hover { background-color: #5E35B1; }"
-                    )
+                    btn.setProperty("role", "secondaryTool")
                     btn.clicked.connect(lambda checked, t=template: self.apply_custom_template(t))
                     self.custom_tmpl_btns.append(btn)
                     layout.addWidget(btn)

@@ -70,12 +70,12 @@ class AdvancedTab(QWidget):
             "本版本 GROMACS 已内置 PLUMED 支持。"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
+        info.setProperty("role", "desc")
         vbox.addWidget(info)
 
         # 1. 伞形采样
         umbrella_group = QGroupBox("伞形采样 (Umbrella Sampling)")
-        umbrella_group.setStyleSheet("QGroupBox { font-weight: bold; color: #7B1FA2; }")
+        umbrella_group.setProperty("role", "phaseGroup")
         ugrid = QGridLayout(umbrella_group)
 
         self.umb_tpr = QLineEdit("md.tpr")
@@ -124,10 +124,7 @@ class AdvancedTab(QWidget):
         ugrid.addWidget(self.umb_pull_nwindows, 4, 1)
 
         self.umb_run_btn = QPushButton("生成伞形采样 MDP")
-        self.umb_run_btn.setStyleSheet(
-            "QPushButton { background-color: #7B1FA2; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #6A1B9A; }"
-        )
+        self.umb_run_btn.setProperty("role", "accentBtn")
         self.umb_run_btn.clicked.connect(self.generate_umbrella_mdp)
         ugrid.addWidget(self.umb_run_btn, 5, 0, 1, 4)
 
@@ -135,7 +132,7 @@ class AdvancedTab(QWidget):
 
         # 2. WHAM 分析
         wham_group = QGroupBox("WHAM 自由能计算")
-        wham_group.setStyleSheet("QGroupBox { font-weight: bold; color: #4527A0; }")
+        wham_group.setProperty("role", "phaseGroup")
         wgrid = QGridLayout(wham_group)
 
         self.wham_files = QLineEdit("pull*.xvg")
@@ -153,11 +150,8 @@ class AdvancedTab(QWidget):
         wgrid.addWidget(QLabel("输出文件:"), 1, 0)
         wgrid.addWidget(self.wham_out, 1, 1)
 
-        self.wham_run_btn = QPushButton("运行 gmx wham")
-        self.wham_run_btn.setStyleSheet(
-            "QPushButton { background-color: #4527A0; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #311B92; }"
-        )
+        self.wham_run_btn = QPushButton("▶ 运行 gmx wham")
+        self.wham_run_btn.setProperty("role", "actionBtn")
         self.wham_run_btn.clicked.connect(self.run_wham)
         wgrid.addWidget(self.wham_run_btn, 2, 0, 1, 4)
 
@@ -165,7 +159,7 @@ class AdvancedTab(QWidget):
 
         # 3. 元动力学
         meta_group = QGroupBox("元动力学 (Metadynamics) - PLUMED")
-        meta_group.setStyleSheet("QGroupBox { font-weight: bold; color: #BF360C; }")
+        meta_group.setProperty("role", "phaseGroup")
         mgrid = QGridLayout(meta_group)
 
         self.meta_tpr = QLineEdit("md.tpr")
@@ -195,18 +189,12 @@ class AdvancedTab(QWidget):
         mgrid.addWidget(self.meta_sigma, 2, 1)
 
         self.meta_gen_btn = QPushButton("生成 PLUMED 输入")
-        self.meta_gen_btn.setStyleSheet(
-            "QPushButton { background-color: #BF360C; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #A02708; }"
-        )
+        self.meta_gen_btn.setProperty("role", "accentBtn")
         self.meta_gen_btn.clicked.connect(self.generate_plumed_meta)
         mgrid.addWidget(self.meta_gen_btn, 3, 0, 1, 2)
 
-        self.meta_run_btn = QPushButton("运行元动力学模拟")
-        self.meta_run_btn.setStyleSheet(
-            "QPushButton { background-color: #E65100; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #BF360C; }"
-        )
+        self.meta_run_btn = QPushButton("▶ 运行元动力学模拟")
+        self.meta_run_btn.setProperty("role", "primaryRun")
         self.meta_run_btn.clicked.connect(self.run_metadynamics)
         mgrid.addWidget(self.meta_run_btn, 3, 2, 1, 2)
 
@@ -214,7 +202,7 @@ class AdvancedTab(QWidget):
 
         # 4. ABF 方法
         abf_group = QGroupBox("自适应偏置力 (ABF)")
-        abf_group.setStyleSheet("QGroupBox { font-weight: bold; color: #006064; }")
+        abf_group.setProperty("role", "phaseGroup")
         agrid = QGridLayout(abf_group)
 
         self.abf_tpr = QLineEdit("md.tpr")
@@ -241,10 +229,7 @@ class AdvancedTab(QWidget):
         agrid.addWidget(self.abf_nbins, 2, 1)
 
         self.abf_gen_btn = QPushButton("生成 ABF PLUMED")
-        self.abf_gen_btn.setStyleSheet(
-            "QPushButton { background-color: #006064; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #004D40; }"
-        )
+        self.abf_gen_btn.setProperty("role", "accentBtn")
         self.abf_gen_btn.clicked.connect(self.generate_plumed_abf)
         agrid.addWidget(self.abf_gen_btn, 3, 0, 1, 4)
 

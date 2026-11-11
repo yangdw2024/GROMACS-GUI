@@ -200,3 +200,67 @@ def test_task_running_state_controls(gui_window, qapp):
     assert win.run_all_btn.isEnabled()
     assert not win.stop_btn.isEnabled()
     assert not win.progress_bar.isVisible()
+
+
+def test_geometry_no_overlap_across_resolutions_and_dpi(gui_window, qapp):
+    """测试 9: 验证多分辨率 (880x620, 1024x768, 1280x820, 1920x1080) 及系统抽屉展开下几何无重叠与无越界"""
+    from gui.themes import get_theme_tokens, build_shell_stylesheet
+
+    win = gui_window
+    win.show()
+
+    # 测试多分辨率 + 抽屉展开
+    win.sys_config_drawer.setVisible(True)
+    for w, h in [(880, 620), (1024, 768), (1280, 820), (1920, 1080)]:
+        win.resize(w, h)
+        qapp.processEvents()
+        qapp.processEvents()
+
+        # 1. Row 1 主控条几何不重叠且不越界
+        row1_widgets = [
+            win.run_all_btn, win.stop_btn, win.mdp_editor_btn, win.monitor_btn,
+            win.save_config_btn, win.load_config_btn, win.more_tools_btn,
+            win.theme_btn, win.layout_mode_btn
+        ]
+        visible_r1 = [btn for btn in row1_widgets if btn.isVisible()]
+        for i in range(len(visible_r1)):
+            g1 = visible_r1[i].geometry()
+            assert g1.left() >= 0 and g1.right() <= w, f"[{w}x{h}] Row1 out of bounds: {visible_r1[i].text()} {g1}"
+            for j in range(i + 1, len(visible_r1)):
+                assert not g1.intersects(visible_r1[j].geometry()), (
+                    f"[{w}x{h}] Row1 overlap: {visible_r1[i].text()} vs {visible_r1[j].text()}"
+                )
+
+        # 2. Row 2 工作目录与环境胶囊不重叠且不越界
+        row2_widgets = [win.lbl_workdir_title, win.path_edit, win.browse_btn, win.ver_badge_btn, win.gpu_badge_btn]
+        visible_r2 = [wid for wid in row2_widgets if wid.isVisible()]
+        for i in range(len(visible_r2)):
+            g1 = visible_r2[i].geometry()
+            assert g1.left() >= 0 and g1.right() <= w, f"[{w}x{h}] Row2 out of bounds: {g1}"
+            for j in range(i + 1, len(visible_r2)):
+                assert not g1.intersects(visible_r2[j].geometry()), (
+                    f"[{w}x{h}] Row2 overlap at index {i} vs {j}"
+                )
+
+        # 3. 系统抽屉内部控件 (Row A & Row B) 不重叠
+        sys_row_a = [win.ver_combo, win.gmx_browse_btn, win.show_all_versions_cb, win.version_mgmt_btn, win.open_update_pkg_btn]
+        for i in range(len(sys_row_a)):
+            g1 = sys_row_a[i].geometry()
+            assert g1.right() <= w, f"[{w}x{h}] SysRowA clip: {g1}"
+            for j in range(i + 1, len(sys_row_a)):
+                assert not g1.intersects(sys_row_a[j].geometry()), f"[{w}x{h}] SysRowA overlap {i} vs {j}"
+
+        # 4. 左侧导航条目文字宽度不超过导航栏宽度
+        nav_w = win.left_nav_rail.width()
+        for _, btn in win.nav_buttons:
+            assert btn.sizeHint().width() <= nav_w, f"[{w}x{h}] Nav text overflow: '{btn.text()}'"
+
+    win.sys_config_drawer.setVisible(False)
+
+    # 5. 验证高 DPI QSS 生成 scale=1.25, 1.5, 2.0 均有效且可解析
+    tokens = get_theme_tokens("dark")
+    for scale in [1.25, 1.5, 2.0]:
+        qss = build_shell_stylesheet(tokens, scale=scale)
+        assert "QFrame#topHeaderBar" in qss
+        assert "QTextEdit#consoleLogView" in qss
+
