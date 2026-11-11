@@ -19,8 +19,7 @@ from gui.app_context import (
     get_gromacs_version_info
 )
 from simulation.mdp_builder import (
-    build_simple_mdp, build_full_mdp, build_umbrella_mdp_files,
-    build_plumed_metad, build_plumed_abf, build_annealing_mdp
+    build_simple_mdp, build_full_mdp, build_annealing_mdp
 )
 from simulation.analysis import build_analysis_command
 from simulation.md_runner import (
@@ -71,6 +70,7 @@ from gui.tabs.script_tab import ScriptTab
 from gui.tabs.mmpbsa_tab import MmpbsaTab
 from gui.tabs.trajectory_tab import TrajectoryTab
 from gui.tabs.structure_tab import StructureTab
+from gui.tabs.advanced_tab import AdvancedTab
 
 
 from gui.workers.gromacs_worker import GromacsWorker
@@ -550,7 +550,8 @@ class GromacsGUI(QMainWindow):
         self.tab_widget.addTab(self.create_md_tab(), "Part 1: MD模拟")
         self.struc_tab = self.create_structure_tab()
         self.tab_widget.addTab(self.struc_tab, "Part 2: 结构处理")
-        self.tab_widget.addTab(self.create_advanced_tab(), "Part 3: 高级模拟")
+        self.advanced_tab = self.create_advanced_tab()
+        self.tab_widget.addTab(self.advanced_tab, "Part 3: 高级模拟")
         self.traj_tab = self.create_trajectory_tab()
         self.tab_widget.addTab(self.traj_tab, "Part 4: 轨迹处理")
         self.tab_widget.addTab(self.create_analysis_tab(), "Part 5: 结果分析")
@@ -2135,209 +2136,49 @@ class GromacsGUI(QMainWindow):
         return group
 
     # -------------------------------------------------------------------------
-    # Part 3: 高级模拟
+    # Part 3: 高级模拟 (已委托至 gui.tabs.advanced_tab.AdvancedTab)
     # -------------------------------------------------------------------------
     def create_advanced_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(10)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        layout.addWidget(scroll)
-
-        content = QWidget()
-        scroll.setWidget(content)
-        vbox = QVBoxLayout(content)
-        vbox.setSpacing(12)
-        vbox.setContentsMargins(8, 10, 8, 10)
-
-        info = QLabel(
-            "高级模拟方法需要特定的 MDP 参数和可能需要 PLUMED 插件支持。\n"
-            "本版本 GROMACS 已内置 PLUMED 支持。"
+        tab = AdvancedTab(
+            get_work_dir=self._get_work_dir,
+            get_gmx_path=lambda: self.gmx_path,
+            get_mdrun_extra=lambda: self._get_mdrun_extra(),
+            parent=self
         )
-        info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
-        vbox.addWidget(info)
+        tab.run_requested.connect(self.run_command)
+        tab.log_requested.connect(self.add_log)
 
-        # 伞形采样
-        umbrella_group = QGroupBox("伞形采样 (Umbrella Sampling)")
-        umbrella_group.setStyleSheet("QGroupBox { font-weight: bold; color: #7B1FA2; }")
-        ugrid = QGridLayout(umbrella_group)
+        # 属性别名绑定
+        self.umb_tpr = tab.umb_tpr
+        self.umb_xtc = tab.umb_xtc
+        self.umb_pull_coord = tab.umb_pull_coord
+        self.umb_pull_group1 = tab.umb_pull_group1
+        self.umb_pull_group2 = tab.umb_pull_group2
+        self.umb_pull_force = tab.umb_pull_force
+        self.umb_pull_start = tab.umb_pull_start
+        self.umb_pull_end = tab.umb_pull_end
+        self.umb_pull_nwindows = tab.umb_pull_nwindows
+        self.umb_run_btn = tab.umb_run_btn
 
-        self.umb_tpr = QLineEdit("md.tpr")
-        self.umb_xtc = QLineEdit("md.xtc")
-        self.umb_pull_coord = QComboBox()
-        self.umb_pull_coord.addItems(["distance", "angle", "dihedral"])
-        self.umb_pull_group1 = QLineEdit("Protein")
-        self.umb_pull_group2 = QLineEdit("Ligand")
-        self.umb_pull_force = QDoubleSpinBox()
-        self.umb_pull_force.setRange(100, 10000)
-        self.umb_pull_force.setValue(1000)
-        self.umb_pull_force.setSuffix(" kJ/mol/nm^2")
-        self.umb_pull_start = QDoubleSpinBox()
-        self.umb_pull_start.setRange(0, 10)
-        self.umb_pull_start.setValue(0)
-        self.umb_pull_start.setDecimals(2)
-        self.umb_pull_end = QDoubleSpinBox()
-        self.umb_pull_end.setRange(0, 10)
-        self.umb_pull_end.setValue(5)
-        self.umb_pull_end.setDecimals(2)
-        self.umb_pull_nwindows = QSpinBox()
-        self.umb_pull_nwindows.setRange(2, 50)
-        self.umb_pull_nwindows.setValue(10)
+        self.wham_files = tab.wham_files
+        self.wham_temp = tab.wham_temp
+        self.wham_out = tab.wham_out
+        self.wham_run_btn = tab.wham_run_btn
 
-        ugrid.addWidget(QLabel("输入TPR:"), 0, 0)
-        ugrid.addWidget(self.umb_tpr, 0, 1)
-        ugrid.addWidget(QLabel("轨迹文件:"), 0, 2)
-        ugrid.addWidget(self.umb_xtc, 0, 3)
+        self.meta_tpr = tab.meta_tpr
+        self.meta_plumed = tab.meta_plumed
+        self.meta_biasfactor = tab.meta_biasfactor
+        self.meta_height = tab.meta_height
+        self.meta_sigma = tab.meta_sigma
+        self.meta_gen_btn = tab.meta_gen_btn
+        self.meta_run_btn = tab.meta_run_btn
 
-        ugrid.addWidget(QLabel("拉动类型:"), 1, 0)
-        ugrid.addWidget(self.umb_pull_coord, 1, 1)
-        ugrid.addWidget(QLabel("组1:"), 1, 2)
-        ugrid.addWidget(self.umb_pull_group1, 1, 3)
-
-        ugrid.addWidget(QLabel("组2:"), 2, 0)
-        ugrid.addWidget(self.umb_pull_group2, 2, 1)
-        ugrid.addWidget(QLabel("力常数:"), 2, 2)
-        ugrid.addWidget(self.umb_pull_force, 2, 3)
-
-        ugrid.addWidget(QLabel("起始位置:"), 3, 0)
-        ugrid.addWidget(self.umb_pull_start, 3, 1)
-        ugrid.addWidget(QLabel("结束位置:"), 3, 2)
-        ugrid.addWidget(self.umb_pull_end, 3, 3)
-
-        ugrid.addWidget(QLabel("窗口数:"), 4, 0)
-        ugrid.addWidget(self.umb_pull_nwindows, 4, 1)
-
-        self.umb_run_btn = QPushButton("生成伞形采样 MDP")
-        self.umb_run_btn.setStyleSheet(
-            "QPushButton { background-color: #7B1FA2; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #6A1B9A; }"
-        )
-        self.umb_run_btn.clicked.connect(self.generate_umbrella_mdp)
-        ugrid.addWidget(self.umb_run_btn, 5, 0, 1, 4)
-
-        vbox.addWidget(umbrella_group)
-
-        # WHAM 分析
-        wham_group = QGroupBox("WHAM 自由能计算")
-        wham_group.setStyleSheet("QGroupBox { font-weight: bold; color: #4527A0; }")
-        wgrid = QGridLayout(wham_group)
-
-        self.wham_files = QLineEdit("pull*.xvg")
-        self.wham_temp = QDoubleSpinBox()
-        self.wham_temp.setRange(1.0, 1000.0)
-        self.wham_temp.setValue(300)
-        self.wham_temp.setSuffix(" K")
-        self.wham_out = QLineEdit("profile.xvg")
-
-        wgrid.addWidget(QLabel("pull 文件模式:"), 0, 0)
-        wgrid.addWidget(self.wham_files, 0, 1)
-        wgrid.addWidget(QLabel("温度:"), 0, 2)
-        wgrid.addWidget(self.wham_temp, 0, 3)
-
-        wgrid.addWidget(QLabel("输出文件:"), 1, 0)
-        wgrid.addWidget(self.wham_out, 1, 1)
-
-        self.wham_run_btn = QPushButton("运行 gmx wham")
-        self.wham_run_btn.setStyleSheet(
-            "QPushButton { background-color: #4527A0; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #311B92; }"
-        )
-        self.wham_run_btn.clicked.connect(self.run_wham)
-        wgrid.addWidget(self.wham_run_btn, 2, 0, 1, 4)
-
-        vbox.addWidget(wham_group)
-
-        # 元动力学
-        meta_group = QGroupBox("元动力学 (Metadynamics) - PLUMED")
-        meta_group.setStyleSheet("QGroupBox { font-weight: bold; color: #BF360C; }")
-        mgrid = QGridLayout(meta_group)
-
-        self.meta_tpr = QLineEdit("md.tpr")
-        self.meta_plumed = QLineEdit("plumed.dat")
-        self.meta_biasfactor = QDoubleSpinBox()
-        self.meta_biasfactor.setRange(1, 100)
-        self.meta_biasfactor.setValue(10)
-        self.meta_height = QDoubleSpinBox()
-        self.meta_height.setRange(0.1, 10)
-        self.meta_height.setValue(0.3)
-        self.meta_height.setSuffix(" kJ/mol")
-        self.meta_sigma = QDoubleSpinBox()
-        self.meta_sigma.setRange(0.01, 1)
-        self.meta_sigma.setValue(0.1)
-
-        mgrid.addWidget(QLabel("输入TPR:"), 0, 0)
-        mgrid.addWidget(self.meta_tpr, 0, 1)
-        mgrid.addWidget(QLabel("PLUMED文件:"), 0, 2)
-        mgrid.addWidget(self.meta_plumed, 0, 3)
-
-        mgrid.addWidget(QLabel("偏置因子:"), 1, 0)
-        mgrid.addWidget(self.meta_biasfactor, 1, 1)
-        mgrid.addWidget(QLabel("高斯高度:"), 1, 2)
-        mgrid.addWidget(self.meta_height, 1, 3)
-
-        mgrid.addWidget(QLabel("高斯宽度:"), 2, 0)
-        mgrid.addWidget(self.meta_sigma, 2, 1)
-
-        self.meta_gen_btn = QPushButton("生成 PLUMED 输入")
-        self.meta_gen_btn.setStyleSheet(
-            "QPushButton { background-color: #BF360C; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #A02708; }"
-        )
-        self.meta_gen_btn.clicked.connect(self.generate_plumed_meta)
-        mgrid.addWidget(self.meta_gen_btn, 3, 0, 1, 2)
-
-        self.meta_run_btn = QPushButton("运行元动力学模拟")
-        self.meta_run_btn.setStyleSheet(
-            "QPushButton { background-color: #E65100; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #BF360C; }"
-        )
-        self.meta_run_btn.clicked.connect(self.run_metadynamics)
-        mgrid.addWidget(self.meta_run_btn, 3, 2, 1, 2)
-
-        vbox.addWidget(meta_group)
-
-        # ABF 方法
-        abf_group = QGroupBox("自适应偏置力 (ABF)")
-        abf_group.setStyleSheet("QGroupBox { font-weight: bold; color: #006064; }")
-        agrid = QGridLayout(abf_group)
-
-        self.abf_tpr = QLineEdit("md.tpr")
-        self.abf_plumed = QLineEdit("plumed_abf.dat")
-        self.abf_min = QDoubleSpinBox()
-        self.abf_min.setValue(0)
-        self.abf_max = QDoubleSpinBox()
-        self.abf_max.setValue(5)
-        self.abf_nbins = QSpinBox()
-        self.abf_nbins.setRange(10, 500)
-        self.abf_nbins.setValue(100)
-
-        agrid.addWidget(QLabel("输入TPR:"), 0, 0)
-        agrid.addWidget(self.abf_tpr, 0, 1)
-        agrid.addWidget(QLabel("PLUMED文件:"), 0, 2)
-        agrid.addWidget(self.abf_plumed, 0, 3)
-
-        agrid.addWidget(QLabel("最小值:"), 1, 0)
-        agrid.addWidget(self.abf_min, 1, 1)
-        agrid.addWidget(QLabel("最大值:"), 1, 2)
-        agrid.addWidget(self.abf_max, 1, 3)
-
-        agrid.addWidget(QLabel("分箱数:"), 2, 0)
-        agrid.addWidget(self.abf_nbins, 2, 1)
-
-        self.abf_gen_btn = QPushButton("生成 ABF PLUMED")
-        self.abf_gen_btn.setStyleSheet(
-            "QPushButton { background-color: #006064; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #004D40; }"
-        )
-        self.abf_gen_btn.clicked.connect(self.generate_plumed_abf)
-        agrid.addWidget(self.abf_gen_btn, 3, 0, 1, 4)
-
-        vbox.addWidget(abf_group)
-
-        vbox.addStretch()
+        self.abf_tpr = tab.abf_tpr
+        self.abf_plumed = tab.abf_plumed
+        self.abf_min = tab.abf_min
+        self.abf_max = tab.abf_max
+        self.abf_nbins = tab.abf_nbins
+        self.abf_gen_btn = tab.abf_gen_btn
         return tab
 
     # -------------------------------------------------------------------------
@@ -5305,6 +5146,8 @@ class GromacsGUI(QMainWindow):
         self.meta_run_btn.setEnabled(not running)
         self.meta_gen_btn.setEnabled(not running)
         self.abf_gen_btn.setEnabled(not running)
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.set_running_state(running)
         self.statusBar().showMessage("运行中..." if running else "就绪")
 
     # -------------------------------------------------------------------------
@@ -6235,86 +6078,27 @@ class GromacsGUI(QMainWindow):
             self.add_log(f"生成 MDP 模板失败: {e}", "error")
 
     # -------------------------------------------------------------------------
-    # Part 3: 高级模拟执行
+    # Part 3: 高级模拟执行 (已委托至 gui.tabs.advanced_tab.AdvancedTab)
     # -------------------------------------------------------------------------
     def generate_umbrella_mdp(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        coord = self.umb_pull_coord.currentText()
-        group1 = self.umb_pull_group1.text().strip()
-        group2 = self.umb_pull_group2.text().strip()
-        force = self.umb_pull_force.value()
-        start = self.umb_pull_start.value()
-        end = self.umb_pull_end.value()
-        nwindows = self.umb_pull_nwindows.value()
-
-        for fname, content in build_umbrella_mdp_files(
-            coord, group1, group2, force, start, end, nwindows
-        ):
-            fpath = os.path.join(wd, fname)
-            with open(fpath, "w", encoding="utf-8") as f:
-                f.write(content)
-
-        self.add_log(f"已生成 {nwindows} 个伞形采样 MDP 文件", "success")
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.generate_umbrella_mdp()
 
     def run_wham(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        gmx = self.gmx_path
-        files = self.wham_files.text().strip()
-        temp = self.wham_temp.value()
-        out = self.wham_out.text().strip() or "profile.xvg"
-
-        cmd = [gmx, "wham", "-it", files, "-o", out, "-temp", str(temp), "-b", "0", "-e", "0"]
-        self.run_command([cmd], wd, step_name="WHAM 自由能计算")
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.run_wham()
 
     def generate_plumed_meta(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        biasfactor = self.meta_biasfactor.value()
-        height = self.meta_height.value()
-        sigma = self.meta_sigma.value()
-        fname = self.meta_plumed.text().strip() or "plumed.dat"
-
-        content = build_plumed_metad(biasfactor, height, sigma)
-        fpath = os.path.join(wd, fname)
-        with open(fpath, "w", encoding="utf-8") as f:
-            f.write(content)
-        self.add_log(f"已生成 PLUMED 输入文件: {fpath}", "success")
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.generate_plumed_meta()
 
     def run_metadynamics(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        gmx = self.gmx_path
-        tpr = self.meta_tpr.text().strip() or "md.tpr"
-
-        extra = self._get_mdrun_extra()
-        cmd = [gmx, "mdrun", "-deffnm", "md_meta", "-plumed", "plumed.dat"] + extra
-        self.run_command([cmd], wd, step_name="元动力学模拟")
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.run_metadynamics()
 
     def generate_plumed_abf(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        min_val = self.abf_min.value()
-        max_val = self.abf_max.value()
-        nbins = self.abf_nbins.value()
-        fname = self.abf_plumed.text().strip() or "plumed_abf.dat"
-
-        content = build_plumed_abf(min_val, max_val, nbins)
-        fpath = os.path.join(wd, fname)
-        with open(fpath, "w", encoding="utf-8") as f:
-            f.write(content)
-        self.add_log(f"已生成 ABF PLUMED 文件: {fpath}", "success")
+        if hasattr(self, "advanced_tab"):
+            self.advanced_tab.generate_plumed_abf()
 
     # -------------------------------------------------------------------------
     # Part 5: 分析执行
