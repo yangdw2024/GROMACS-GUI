@@ -55,3 +55,18 @@ SA 溶剂分批蒸发 (循环删除 CF 溶剂，逐轮 100 ps NPT 平衡，盒�
 | **05. PM6 : BTP-FFClCl** | 非对称异卤 (F-F-Cl-Cl) | `Ternary_Datas` / `MD-4-BT4` | **100 ps** | 250 轮 × 200 个 CF | **25 ns** | Berendsen (100 bar, $\tau_p=0.5$) | 遵循 250 轮标准协议 |
 
 > **重要准则**：严禁在代码中强行统一各体系参数；各体系的科学配置由其研究目的与实验对应物决定。
+
+---
+
+## 四、已落地的科学可靠性加固机制（PR #15 & PR #16）
+
+1. **`grompp -maxwarn` 告警安全上限**：
+   - 标准步骤默认 `-maxwarn 2`，SA 蒸发与退火步骤收敛至 `SA_SAFE_MAXWARN = 5`，代码硬上限 `MAXWARN_HARD_CAP = 10`（拒绝 `-maxwarn 200` 等盲目参数）。
+2. **溶剂删除模式语义明确化 (`top`/`bottom` vs `z_top`/`z_bottom`)**：
+   - 原有 `bottom` / `top` 实质按 GRO 文件记录顺序删除（保留以保证历史体系结果 100% 可复现）；
+   - 新增基于分子几何中心空间 Z 坐标排序的 `z_top` 与 `z_bottom` 物理蒸发模式。
+3. **运行后置物理一致性自检 (`source/simulation/validation.py`)**：
+   - 严格区分 `PASS` / `WARNING` / `BLOCKED`；阻断 `NaN/Inf` 坐标或能量、坍塌盒子、Too many LINCS warnings 与 SETTLE 失败；同时**显式豁免 NPT 凝聚相正常瞬时压力剧烈波动**。
+4. **MMPBSA 科学规范增强 (`source/simulation/analysis.py`)**：
+   - 物理时间 (ps) 必须按 `traj_dt_ps` 严谨换算为 1-based 帧索引 (`convert_ps_to_mmpbsa_frames`)；
+   - 解析真实 `.ndx` 组号消除 `-cg 1 13` 硬编码；非蛋白有机高分子体系显式标识为实验性功能。

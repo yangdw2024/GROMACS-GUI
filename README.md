@@ -1,335 +1,109 @@
-# GROMACS 动力学模拟与分析集成工具
+# GROMACS-GUI · 分子动力学模拟与分析集成桌面平台
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-v4.3.0-blue)
-![Python](https://img.shields.io/badge/python-3.13-green)
-![PyQt5](https://img.shields.io/badge/PyQt5-GUI-orange)
-![License](https://img.shields.io/badge/license-MIT-brightgreen)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Version](https://img.shields.io/badge/version-v4.4.0--rc.1-blue)
+![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-green)
+![PyQt5](https://img.shields.io/badge/PyQt5-5.15+-orange)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
+![License](https://img.shields.io/badge/license-MIT%20(Pending%20Review)-yellow)
+
+[English Documentation](README_EN.md) | [更新日志 (CHANGELOG)](CHANGELOG.md) | [工程验收文档](docs/engineering/FINAL_ENGINEERING_REPORT.md)
 
 </div>
 
-## 项目简介
+---
 
-GROMACS GUI 是一款基于 Python + PyQt5 开发的分子动力学模拟图形化工具，将复杂的 GROMACS 命令行操作封装为直观的图形界面，覆盖从结构准备到结果分析的分子动力学模拟全流程。内置错误自动纠正、操作审计、版本管理等模块。
+## 一、项目简介
 
-**无需记忆任何命令行参数，零门槛上手分子动力学模拟。**
+**GROMACS-GUI** 是一款基于 Python + PyQt5 开发的专业分子动力学模拟与后处理桌面软件，致力于为科研人员提供现代化、模块化、高可靠的 GROMACS 工作流集成环境：
 
-***
+- **双布局、双主题、双语言**：支持「左侧垂直导航工作台」与「经典双栏标签视图」切换，Slate 深/浅色专业科研主题切换，以及 **中文 / English 实时无重启切换**；
+- **组件化七大功能页**：MD 全流程与 SA 溶剂蒸发、结构处理、增强采样（伞形采样/WHAM/PLUMED）、轨迹预处理与工具、结果分析与自动科研绘图、MMPBSA 自由能计算、自定义脚本批处理；
+- **科研计算安全机制**：
+  - SA 溶剂分批蒸发逐轮 NPT 结构与速度继承、严格跨轮 CPT 隔离校验、同轮中断安全续跑；
+  - `grompp -maxwarn` 安全上限门禁（拒绝盲目 `-maxwarn 200`）；
+  - 溶剂删除支持旧版 GRO 记录顺序兼容 (`bottom`/`top`) 与物理空间 Z 坐标排序 (`z_top`/`z_bottom`)；
+  - 任务后置物理自检 (`NaN/Inf`、LINCS 爆炸拦截，且对正常 NPT 压力自然波动零误报)。
 
-## 核心功能
+---
 
-### 七大功能模块
+## 二、目录结构与模块化架构
 
-| 模块         | 功能                                                        |
-| ---------- | --------------------------------------------------------- |
-| **MD 模拟**  | 能量最小化 → 离子化 → NVT → NPT → 生产模拟 → 相分离 → 溶剂蒸发 → 退火          |
-| **结构处理**   | 盒子构建、溶剂化、离子添加、位置限制                                        |
-| **高级模拟**   | 伞形采样、元动力学、ABF、拉伸动力学、退火（PLUMED 增强采样）                       |
-| **轨迹处理**   | trjconv/trjcat 格式转换、PBC 处理、质心居中                           |
-| **结果分析**   | RMSD / RMSF / Rg / RDF / 氢键 / SASA / PCA / 能量 / 聚类 / 批量分析 |
-| **MMPBSA** | 结合自由能计算                                                   |
-| **自定义脚本**  | 用户自定义脚本运行                                                 |
-
-### 辅助系统
-
-- **MDP 可视化编辑器** — 9 个子标签页，实时预览所有 MDP 参数
-
-- **实时监控面板** — 温度 / 压力 / 能量 / 密度曲线实时绘制
-
-- **智能错误诊断器** — 自动分析错误日志，提供中文修复建议
-
-- **多版本管理器** — 6 级校验 + SHA256 去重 + 白名单保护
-
-- **自动更新** — 全量 / 增量更新，SHA256 校验，备份回滚
-
-- **审计追踪** — 13 类操作全留痕，按天归档
-
-- **崩溃捕获** — 全局异常钩子，双格式 (JSON + LOG) 报告
-
-- **GPU 兼容** — 自动检测 GPU，无 GPU 时强制 CPU 模式
-
-***
-
-## 架构设计
-
-### 三层结构
-
-```
-┌─────────────────────────────────────────────┐
-│              UI 层                           │  PyQt5 图形界面
-├─────────────────────────────────────────────┤
-│           核心框架层 (15 个功能模块)            │  配置/日志/监控/版本管理
-├─────────────────────────────────────────────┤
-│              资源层                           │  GROMACS 引擎
-└─────────────────────────────────────────────┘
-```
-
-### 核心框架模块
-
-| 模块                     | 职责                     |
-| ---------------------- | ---------------------- |
-| `config_manager`       | 配置读写与合并                |
-| `logger`               | 日志记录                   |
-| `error_handler`        | 错误分类与提示                |
-| `resource_monitor`     | CPU / 内存 / 磁盘 / GPU 监控 |
-| `gromacs_service`      | GROMACS 命令封装与版本识别      |
-| `wsl_gromacs_service`  | WSL 下的 GROMACS 命令封装    |
-| `workflow_engine`      | 模拟流程状态管理               |
-| `event_bus`            | 模块间消息传递                |
-| `review_mechanism`     | 运行前 / 中 / 后检查          |
-| `correction_mechanism` | 错误自动纠正（GPU 降级 / 重试）    |
-| `audit_mechanism`      | 操作审计                   |
-| `auto_updater`         | 程序自动更新                 |
-| `version_manager`      | GROMACS 版本管理           |
-| `crash_handler`        | 崩溃捕获与报告                |
-| `wsl_update_manager`   | WSL 更新管理               |
-
-### 关键机制
-
-#### 错误自动纠正
-
-运行出错时按类别自动处理：
-
-- GPU 不可用 → 自动降级 CPU 模式
-
-- 内存 >90% → 线程数减半
-
-- 文件被占用 → 指数退避重试
-
-- 子进程超时 → 超时翻倍重试（最多 3 次）
-
-- 配置错误 → 回滚默认配置
-
-#### 运行检查
-
-```
-启动前                      运行中                    执行后
- ├─ 输入文件检查           ├─ 进程存活检查           ├─ 输出文件完整性
- ├─ 参数边界校验           ├─ 输出文件生成检查        ├─ 日志错误扫描
- ├─ 磁盘空间检查           ├─ 内存使用率监控          └─ 综合判定
- └─ GPU 可用性匹配          └─ 资源阈值告警
-```
-
-***
-
-## 项目结构
-
-```
+```text
 GROMACS-GUI/
-├── source/                          # 源代码
-│   ├── main.py                      # 程序入口
-│   ├── gromacs_gui_v4.py            # 兼容入口（转调 gui 包）
-│   ├── gui/                         # GUI 层
-│   │   ├── app_context.py           # 运行时路径/版本配置/GMX与硬件检测
-│   │   ├── main_window.py           # 主窗口 GromacsGUI
-│   │   ├── app.py                   # 启动引导（协议/崩溃处理/单实例）
-│   │   ├── embedded_scripts.py      # 嵌入的溶剂/添加剂删除脚本
-│   │   ├── dialogs/                 # 对话框
-│   │   │   ├── error_diagnosis.py   # 错误诊断
-│   │   │   ├── mdp_editor.py        # MDP 可视化编辑器
-│   │   │   ├── simulation_monitor.py # 实时监控
-│   │   │   ├── custom_template.py   # 自定义模板
-│   │   │   └── help_dialog.py       # 帮助
-│   │   ├── widgets/                 # 自定义控件
-│   │   │   └── curve_widget.py      # 实时曲线
-│   │   └── workers/                 # 工作线程
-│   │       ├── gromacs_worker.py    # GROMACS 执行线程
-│   │       └── data_extractor.py    # 数据提取线程
-│   ├── core/                        # 核心框架 (15 个功能模块)
-│   │   ├── config_manager.py       # 配置管理
-│   │   ├── logger.py               # 日志记录
-│   │   ├── error_handler.py        # 错误处理
-│   │   ├── resource_monitor.py     # 资源监控
-│   │   ├── gromacs_service.py      # GROMACS 命令封装
-│   │   ├── wsl_gromacs_service.py  # WSL GROMACS 命令封装
-│   │   ├── workflow_engine.py      # 工作流状态管理
-│   │   ├── event_bus.py            # 模块间消息传递
-│   │   ├── review_mechanism.py      # 运行检查
-│   │   ├── correction_mechanism.py # 错误自动纠正
-│   │   ├── audit_mechanism.py      # 操作审计
-│   │   ├── auto_updater.py         # 自动更新
-│   │   ├── version_manager.py      # 版本管理
-│   │   ├── crash_handler.py        # 崩溃捕获
-│   │   └── wsl_update_manager.py   # WSL 更新管理
-│   └── config/                      # 配置文件
-│       ├── app_config.json         # 应用配置
-│       └── latest_version.json     # 版本信息
-├── tests/                           # pytest 测试
-│   ├── unit/                        # 单元测试
-│   └── integration/                 # 集成测试（需 GROMACS 引擎）
-├── resources/                       # 资源文件
-│   ├── app_icon.ico                 # 程序图标
-│   ├── app_icon.png
-│   └── GROMACS_GUI使用说明_V4.0.md
-├── build_scripts/                   # 构建脚本（仅保留最终版，历史版本在 archive/）
-├── version.config                   # 版本配置
-├── requirements.txt                 # Python 依赖
-├── 说明书.md                         # 用户手册
-└── .gitignore
+├── source/
+│   ├── main.py                         # 应用主入口 (含 multiprocessing.freeze_support)
+│   ├── gromacs_gui_v4.py               # 兼容入口
+│   ├── core/                           # 核心基础设施 (版本管理、配置、日志、崩溃捕获、资源监控)
+│   ├── simulation/                     # 纯科研计算与命令构建层 (无 Qt 耦合)
+│   │   ├── md_runner.py                # MD 流水线、SA 逐轮继承命令与 -maxwarn 策略
+│   │   ├── mdp_builder.py              # EM / NVT / NPT / MD / 退火 / 伞形 / PLUMED 参数生成
+│   │   ├── analysis.py                 # 分析、轨迹、结构、MMPBSA 参数与 NDX 组解析
+│   │   └── validation.py               # GRO 结构与 md.log 物理一致性后置自检
+│   └── gui/
+│       ├── main_window.py              # 薄化主窗口外壳 (装配、导航、主题、语言、统一调度)
+│       ├── i18n.py                     # 中英双语翻译与科研术语词典
+│       ├── themes/theme_tokens.py      # Slate 深浅色 Design System 与语义化 QSS
+│       ├── tabs/                       # 七大独立功能组件
+│       │   ├── md_tab.py               # Part 1: MD 模拟与 SA 溶剂蒸发 / 退火
+│       │   ├── structure_tab.py        # Part 2: 结构准备与校验
+│       │   ├── advanced_tab.py         # Part 3: 伞形采样 / WHAM / PLUMED
+│       │   ├── trajectory_tab.py       # Part 4: 轨迹预处理流水线与工具
+│       │   ├── analysis_tab.py         # Part 5: 结果分析、片段 RDF 与科研绘图
+│       │   ├── mmpbsa_tab.py           # Part 6: MMPBSA 计算 (实验性支持有机体系)
+│       │   └── script_tab.py           # Part 7: PowerShell / Batch / Shell 自定义脚本
+│       ├── dialogs/                    # MDP 编辑器、实时曲线监控、错误诊断等弹窗
+│       └── workers/                    # GromacsWorker (QThread + Windows Job 内存限制)
+├── build_scripts/
+│   ├── build_windows_portable.py       # 可复现 Windows 便携包构建 + SHA256 + --smoke-test
+│   └── installer_v43.iss               # Inno Setup 安装脚本 (相对路径)
+├── tests/unit/                         # 198+ 自动化单元测试 (Ubuntu & Windows 双平台 CI)
+└── docs/engineering/                   # 架构设计、测试矩阵、科研验证与工程交付总报告
 ```
 
-> **注意**: GROMACS 引擎二进制文件 (`gromacs/`)、Python 环境 (`miniconda3/`)、发布包 (`release_package/`) 等大型文件不纳入版本控制，请参考下方「环境准备」章节自行配置。
+---
 
-***
+## 三、安装、开发与运行指南
 
-## 快速开始
+### 1. 环境准备
+- **操作系统**：Windows 10/11 (64-bit) 或 Linux (X11/Wayland/Offscreen)
+- **Python**：3.11 / 3.12 / 3.13
+- **GROMACS**：需自行安装官方或 CUDA 编译版 GROMACS 2025.x / 2026.x（本软件不捆绑分发第三方 GROMACS 二进制文件）
 
-### 环境要求
-
-- **操作系统**: Windows 10/11 (64-bit)
-
-- **Python**: 3.10+ (推荐 3.13)
-
-- **GROMACS**: 2025.1 或 2026.x (需单独安装)
-
-- **GPU**（可选）: NVIDIA GPU + CUDA 13.0+
-
-### 安装依赖
-
+### 2. 从源码运行与测试
 ```bash
-pip install -r requirements.txt
-```
-
-### 从源码运行
-
-```bash
-# 克隆仓库
 git clone https://github.com/yangdw2024/GROMACS-GUI.git
 cd GROMACS-GUI
-
-# 安装依赖
 pip install -r requirements.txt
 
-# 将 GROMACS 安装到 gromacs/ 目录（或修改配置中的扫描路径）
-# 确保 gmx.exe 可用
-
-# 启动程序
+# 启动图形界面
 python source/gromacs_gui_v4.py
+
+# 运行全量自动化单元测试
+python -m pytest tests/unit -v
 ```
 
-### ⚡ 方式一：直接下载完整程序包（推荐）
-
-**重要：请勿下载 GitHub 自动生成的 "Source code (zip)"，那只是源码（不到 1MB），无法直接运行！**
-
-请从 [Releases 页面](https://github.com/yangdw2024/GROMACS-GUI/releases/tag/v4.3.0) 下载完整的一体化程序包：
-
-1. 打开 [Releases 页面](https://github.com/yangdw2024/GROMACS-GUI/releases/tag/v4.3.0)
-2. 下载 **GROMACS\_GUI\_v4.3.0\_Full\_Package.zip**（1.37 GB）—— 这是一体化完整包（GUI + GROMACS 引擎）
-3. 解压到任意目录
-4. 双击 `start.bat` 启动 —— **直接可用，无需任何额外安装！**
-
-**包含内容**：
-
-- PyInstaller 打包的 exe、Python 3.13 运行时、PyQt5 等所有依赖
-
-- GROMACS 2026.x 引擎（含 CUDA 13.0 GPU 加速库）
-
-- 启动脚本、卸载脚本
-
-**无需安装**：Python、GROMACS、CUDA（均已内置）。
-
-**提示**：即使没有 NVIDIA GPU，软件也会自动切换到纯 CPU 模式正常运行。
-
-### 方式二：从源码运行
-
+### 3. 可复现 Windows 便携版打包与校验
 ```bash
-# 克隆仓库
-git clone https://github.com/yangdw2024/GROMACS-GUI.git
-cd GROMACS-GUI
-
-# 安装依赖
-pip install PyQt5 numpy psutil
-
-# 将 GROMACS 安装到 gromacs/ 目录（或修改配置中的扫描路径）
-# 确保 gmx.exe 可用
-
-# 启动程序
-python source/gromacs_gui_v4.py
+pip install pyinstaller
+python build_scripts/build_windows_portable.py --smoke-test
 ```
+构建产物将生成于 `release/` 目录：
+- `GROMACS-GUI-v<version>-win64-portable.zip`（独立便携运行包，只读目录下自动回退至 `%LOCALAPPDATA%\GROMACS-GUI` 写入配置与日志）
+- `SHA256SUMS.txt`
 
-### 打包发布
+---
 
-```bash
-# 运行构建脚本（自动生成 exe + zip）
-cd build_scripts
-build_release.bat
-```
+## 四、科学适用性与已知限制
 
-***
+1. **SA 溶剂蒸发模块**：`bottom` / `top` 选项兼容历史 GRO 文件顺序；若需按物理盒子空间 Z 轴方向优先移除分子，请显式选用 **`按空间 Z 坐标从顶部/底部蒸发 (Z-Top / Z-Bottom)`**。
+2. **MMPBSA 模块（实验性提示）**：支持通过 `轨迹帧间隔` 将 ps 精确换算为 `gmx_MMPBSA` 1-based 帧索引，支持解析 `.ndx` 动态指定 `-cg` 受体/配体组别并自动生成 `mmpbsa.in`。**请注意**：针对高分子/小分子有机光伏等非蛋白体系的隐式溶剂结合自由能计算仍属实验性用途，需用户自行验证力场拓扑与介电参数适用性。
+3. **开源许可待确认声明**：仓库根目录 [`LICENSE`](LICENSE) 声明为 MIT 协议，但软件内弹窗（`source/gui/app.py`）保留了非商业销售限制条款。在版权人确认统一方案前，请勿擅自用于商业分发。
 
-## 使用指南
+---
 
-### 基本工作流
+## 五、版权与贡献
 
-1. **选择工作目录** — 顶部路径栏选择模拟工作目录
-2. **选择 GROMACS 版本** — 自动扫描或手动指定 GROMACS 安装路径
-3. **MD 模拟标签页** — 按阶段依次执行：EM1 → EM2 → 离子化 → NVT → NPT → 生产
-4. **结果分析标签页** — 选择分析类型，填入文件名，一键运行
-5. **轨迹处理** — 格式转换、PBC 处理等
-
-### 溶剂蒸发（分批模式）
-
-溶剂蒸发模块支持断点续跑：
-
-1. 设置总轮数和每轮蒸发分子数
-2. 勾选「分批蒸发模式」
-3. 中断后可通过设置起始轮数恢复续跑
-4. 程序自动维护 `current.top` / `current.gro` 文件链
-
-### GPU 配置
-
-- 有 NVIDIA GPU：勾选「启用 GPU」并选择 GPU 编号
-
-- 无 NVIDIA GPU：程序自动检测并禁用 GPU 选项，GROMACS 以纯 CPU 模式运行
-
-- 环境变量 `GMX_DISABLE_GPU_DETECTION` 在无 GPU 时自动设置
-
-***
-
-## 技术栈
-
-| 技术          | 用途                |
-| ----------- | ----------------- |
-| Python 3.13 | 主开发语言             |
-| PyQt5       | GUI 框架            |
-| PyInstaller | 打包为 Windows 可执行文件 |
-| GROMACS     | 分子动力学引擎           |
-| PLUMED      | 增强采样插件            |
-| psutil      | 系统资源监控            |
-| numpy       | 数据处理              |
-
-***
-
-## 版本历史
-
-| 版本     | 日期         | 主要变更                             |
-| ------ | ---------- | -------------------------------- |
-| v4.3.0 | 2026-07-16 | 修复 GPU 检测崩溃、属性名错误、无 GPU 兼容、图标重设计 |
-| v4.2.0 | 2026-07-09 | 卸载程序、UI 布局修复、溶剂蒸发断点续跑            |
-| v4.1.0 | 2026-06-28 | 多版本管理、自动更新、审计追踪                  |
-| v4.0.0 | 2026-06-15 | 初始发布，七大功能模块                      |
-
-***
-
-## 许可证
-
-[MIT License](LICENSE)
-
-## 作者
-
-**YangDewu** — Copyright (c) 2026 YangDewu. All rights reserved.
-
-***
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
+- **作者**：YangDewu (阳德武) — Copyright (c) 2026 YangDewu. All rights reserved.
+- **贡献方式**：欢迎在 `dev` 分支提交 Issue 与 Pull Request，所有合并均需通过 Ubuntu 与 Windows 双平台 GitHub Actions CI 检验。

@@ -22,13 +22,14 @@ GROMACS-GUI 遵循“**界面层薄化、计算逻辑收敛、基础设施隔离
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   Layer 2: GUI Tabs (功能页面组件)                      │
-│  - Part 1: 基础 MD 模拟 (source/gui/tabs/md_tab.py)                    │
-│  - Part 2: 结构处理 (source/gui/tabs/structure_tab.py)                 │
-│  - Part 3: 进阶模拟 SA/退火 (source/gui/tabs/advanced_tab.py)          │
-│  - Part 4: 轨迹预处理 (source/gui/tabs/trajectory_tab.py)              │
-│  - Part 5: 结果分析与片段接触 (source/gui/tabs/analysis_tab.py)        │
-│  - Part 6: 自由能计算 MMPBSA (source/gui/tabs/mmpbsa_tab.py) [已实现]   │
-│  - Part 7: 自定义脚本批处理 (source/gui/tabs/script_tab.py) [已实现]    │
+├── GUI Tabs (全部 7 大组件已独立抽离完毕)
+│   ├── Part 1: MD Simulation (source/gui/tabs/md_tab.py)
+│   ├── Part 2: Structure Processing (source/gui/tabs/structure_tab.py)
+│   ├── Part 3: Advanced Simulation (source/gui/tabs/advanced_tab.py)
+│   ├── Part 4: Trajectory Processing (source/gui/tabs/trajectory_tab.py)
+│   ├── Part 5: Analysis & Plotting (source/gui/tabs/analysis_tab.py)
+│   ├── Part 6: MMPBSA (source/gui/tabs/mmpbsa_tab.py)
+│   └── Part 7: Custom Scripts (source/gui/tabs/script_tab.py)
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ (构造注入环境 / 发送任务请求信号)
                                     ▼
