@@ -10,6 +10,7 @@ from .trajectory_tab import TrajectoryTab
 from .structure_tab import StructureTab
 from .advanced_tab import AdvancedTab
 from .analysis_tab import AnalysisTab
+from .md_tab import MdTab
 
 __all__ = [
     "ScriptTab",
@@ -17,5 +18,6 @@ __all__ = [
     "TrajectoryTab",
     "StructureTab",
     "AdvancedTab",
-    "AnalysisTab"
+    "AnalysisTab",
+    "MdTab"
 ]
