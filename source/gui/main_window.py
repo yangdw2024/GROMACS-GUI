@@ -71,6 +71,7 @@ from gui.dialogs.mdp_editor import MdpEditorDialog
 
 
 from gui.dialogs.simulation_monitor import SimulationMonitorDialog
+from gui.tabs.script_tab import ScriptTab
 
 
 from gui.workers.gromacs_worker import GromacsWorker
@@ -553,7 +554,8 @@ class GromacsGUI(QMainWindow):
         self.tab_widget.addTab(self.create_trajectory_tab(), "Part 4: 轨迹处理")
         self.tab_widget.addTab(self.create_analysis_tab(), "Part 5: 结果分析")
         self.tab_widget.addTab(self.create_mmpbsa_tab(), "Part 6: MMPBSA")
-        self.tab_widget.addTab(self.create_script_tab(), "Part 7: 自定义脚本")
+        self.script_tab = self.create_script_tab()
+        self.tab_widget.addTab(self.script_tab, "Part 7: 自定义脚本")
         self.tab_widget.tabBar().setVisible(False)
         self.tab_widget.currentChanged.connect(self._sync_nav_selection)
         left_layout.addWidget(self.tab_widget)
@@ -7048,241 +7050,47 @@ class GromacsGUI(QMainWindow):
         self.run_command([cmd], wd, step_name)
 
     # -------------------------------------------------------------------------
-    # Part 7: 自定义脚本
+    # Part 7: 自定义脚本 (已委托至 gui.tabs.script_tab.ScriptTab)
     # -------------------------------------------------------------------------
     def create_script_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(12)
-
-        info = QLabel(
-            "自定义脚本运行模块。可以编写 Windows PowerShell / Batch 脚本，"
-            "调用 GROMACS 命令或执行其他自定义流程。\n"
-            "提示: 脚本会在工作目录下执行，可使用 $env:GMX 或 %GMX% 获取gmx路径。"
+        tab = ScriptTab(
+            get_work_dir=self._get_work_dir,
+            get_gmx_path=lambda: self.gmx_path,
+            parent=self
         )
-        info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
-        layout.addWidget(info)
+        tab.run_requested.connect(self.run_command)
+        tab.log_requested.connect(self.add_log)
 
-        # 工具栏
-        toolbar = QHBoxLayout()
-
-        self.script_type = QComboBox()
-        self.script_type.addItems(["PowerShell (.ps1)", "Batch (.bat)", "Shell 命令"])
-        self.script_type.setCurrentIndex(2)
-        toolbar.addWidget(QLabel("脚本类型:"))
-        toolbar.addWidget(self.script_type)
-
-        self.script_save_btn = QPushButton("保存脚本")
-        self.script_save_btn.clicked.connect(self._save_script)
-        self.script_load_btn = QPushButton("加载脚本")
-        self.script_load_btn.clicked.connect(self._load_script)
-        self.script_clear_btn = QPushButton("清空")
-        self.script_clear_btn.clicked.connect(lambda: self.script_edit.clear())
-        self.script_run_btn = QPushButton("▶ 运行脚本")
-        self.script_run_btn.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #45a049; }"
-        )
-        self.script_run_btn.clicked.connect(self.run_script)
-
-        toolbar.addStretch(1)
-        toolbar.addWidget(self.script_load_btn)
-        toolbar.addWidget(self.script_save_btn)
-        toolbar.addWidget(self.script_clear_btn)
-        toolbar.addWidget(self.script_run_btn)
-        layout.addLayout(toolbar)
-
-        # 脚本编辑器
-        script_group = QGroupBox("脚本编辑")
-        script_group.setStyleSheet("QGroupBox { font-weight: bold; color: #6A1B9A; }")
-        sg_layout = QVBoxLayout(script_group)
-
-        self.script_edit = QPlainTextEdit()
-        self.script_edit.setPlaceholderText(
-            "# 示例: 运行一个简单的 GROMACS 命令\n"
-            "# PowerShell 脚本示例:\n"
-            "$GMX = \"" + self.gmx_path.replace("\\", "/") + "\"\n"
-            "Write-Host \"Running gmx version...\"\n"
-            "& $GMX --version\n"
-        )
-        font = QFont("Consolas", 10)
-        self.script_edit.setFont(font)
-        self.script_edit.setMinimumHeight(400)
-        sg_layout.addWidget(self.script_edit)
-
-        layout.addWidget(script_group, stretch=1)
-
-        # 示例模板
-        tmpl_group = QGroupBox("快速模板")
-        tmpl_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E65100; }")
-        tmpl_layout = QVBoxLayout(tmpl_group)
-
-        tmpl_row1 = QHBoxLayout()
-        tmpl_btn1 = QPushButton("能量最小化")
-        tmpl_btn1.clicked.connect(lambda: self._load_script_template("em"))
-        tmpl_btn2 = QPushButton("完整MD流程")
-        tmpl_btn2.clicked.connect(lambda: self._load_script_template("full_md"))
-        tmpl_btn3 = QPushButton("RMSD分析")
-        tmpl_btn3.clicked.connect(lambda: self._load_script_template("rmsd"))
-        tmpl_btn4 = QPushButton("RDF分析")
-        tmpl_btn4.clicked.connect(lambda: self._load_script_template("rdf"))
-        tmpl_row1.addWidget(tmpl_btn1)
-        tmpl_row1.addWidget(tmpl_btn2)
-        tmpl_row1.addWidget(tmpl_btn3)
-        tmpl_row1.addWidget(tmpl_btn4)
-        tmpl_row1.addStretch(1)
-
-        tmpl_row2 = QHBoxLayout()
-        tmpl_btn5 = QPushButton("氢键分析")
-        tmpl_btn5.clicked.connect(lambda: self._load_script_template("hbond"))
-        tmpl_btn6 = QPushButton("SASA分析")
-        tmpl_btn6.clicked.connect(lambda: self._load_script_template("sasa"))
-        tmpl_btn7 = QPushButton("PCA分析")
-        tmpl_btn7.clicked.connect(lambda: self._load_script_template("pca"))
-        tmpl_btn8 = QPushButton("NVT")
-        tmpl_btn8.clicked.connect(lambda: self._load_script_template("nvt"))
-        tmpl_btn9 = QPushButton("NPT")
-        tmpl_btn9.clicked.connect(lambda: self._load_script_template("npt"))
-        tmpl_btn10 = QPushButton("MD")
-        tmpl_btn10.clicked.connect(lambda: self._load_script_template("md"))
-        tmpl_row2.addWidget(tmpl_btn5)
-        tmpl_row2.addWidget(tmpl_btn6)
-        tmpl_row2.addWidget(tmpl_btn7)
-        tmpl_row2.addWidget(tmpl_btn8)
-        tmpl_row2.addWidget(tmpl_btn9)
-        tmpl_row2.addWidget(tmpl_btn10)
-        tmpl_row2.addStretch(1)
-
-        tmpl_row3 = QHBoxLayout()
-        tmpl_btn11 = QPushButton("ClFFCl EM+NPT")
-        tmpl_btn11.clicked.connect(lambda: self._load_script_template("clffcl_em_npt"))
-        tmpl_btn12 = QPushButton("ClFFCl SA蒸发")
-        tmpl_btn12.clicked.connect(lambda: self._load_script_template("clffcl_sa"))
-        tmpl_btn13 = QPushButton("ClFFCl MD-1")
-        tmpl_btn13.clicked.connect(lambda: self._load_script_template("clffcl_md1"))
-        tmpl_btn14 = QPushButton("ClFFCl evapDIO")
-        tmpl_btn14.clicked.connect(lambda: self._load_script_template("clffcl_evapdio"))
-
-        tmpl_btn_manage = QPushButton("管理自定义模板")
-        tmpl_btn_manage.setStyleSheet(
-            "QPushButton { background-color: #9C27B0; color: white; font-weight: bold; padding: 6px 16px; }"
-            "QPushButton:hover { background-color: #7B1FA2; }"
-        )
-        tmpl_btn_manage.clicked.connect(self._on_manage_templates)
-
-        tmpl_row3.addWidget(tmpl_btn11)
-        tmpl_row3.addWidget(tmpl_btn12)
-        tmpl_row3.addWidget(tmpl_btn13)
-        tmpl_row3.addWidget(tmpl_btn14)
-
-        self.custom_tmpl_btns = []
-        self._load_custom_template_buttons(tmpl_row3)
-
-        tmpl_row3.addWidget(tmpl_btn_manage)
-        tmpl_row3.addStretch(1)
-
-        tmpl_layout.addLayout(tmpl_row1)
-        tmpl_layout.addLayout(tmpl_row2)
-        tmpl_layout.addLayout(tmpl_row3)
-        layout.addWidget(tmpl_group)
-
+        # 暴露原有属性别名，保证 100% 向后兼容旧访问代码与测试
+        self.script_type = tab.script_type
+        self.script_edit = tab.script_edit
+        self.script_save_btn = tab.script_save_btn
+        self.script_load_btn = tab.script_load_btn
+        self.script_clear_btn = tab.script_clear_btn
+        self.script_run_btn = tab.script_run_btn
+        self.custom_tmpl_btns = tab.custom_tmpl_btns
         return tab
 
-    def _load_custom_template_buttons(self, layout):
-        if getattr(sys, 'frozen', False):
-            base = os.path.dirname(sys.executable)
-        else:
-            base = os.path.dirname(os.path.abspath(__file__))
-        templates_file = os.path.join(base, "templates.json")
-        if os.path.isfile(templates_file):
-            try:
-                with open(templates_file, "r", encoding="utf-8") as f:
-                    custom_templates = json.load(f)
-                for template in custom_templates:
-                    btn = QPushButton(template["name"])
-                    btn.setStyleSheet(
-                        "QPushButton { background-color: #7E57C2; color: white; font-weight: bold; padding: 6px 12px; }"
-                        "QPushButton:hover { background-color: #5E35B1; }"
-                    )
-                    btn.clicked.connect(lambda checked, t=template: self._apply_custom_template(t))
-                    self.custom_tmpl_btns.append(btn)
-                    layout.addWidget(btn)
-            except Exception:
-                pass
-
     def _apply_custom_template(self, template):
-        self.script_edit.setPlainText(template["content"])
-        idx = self.script_type.findText(template["type"])
-        if idx >= 0:
-            self.script_type.setCurrentIndex(idx)
+        if hasattr(self, "script_tab"):
+            self.script_tab.apply_custom_template(template)
 
     def _on_manage_templates(self):
-        dialog = CustomTemplateDialog(self)
-        if dialog.exec_() == QDialog.Accepted:
-            tmpl_group = self.tab_widget.widget(6).findChild(QGroupBox, "")
-            if tmpl_group:
-                tmpl_layout = tmpl_group.layout()
-                for btn in self.custom_tmpl_btns:
-                    tmpl_layout.removeWidget(btn)
-                    btn.deleteLater()
-                self.custom_tmpl_btns.clear()
-                self._load_custom_template_buttons(tmpl_layout)
-            self.add_log("自定义模板已更新", "success")
+        if hasattr(self, "script_tab"):
+            self.script_tab.manage_templates()
 
     def _load_script_template(self, key):
-        gmx_norm = self.gmx_path.replace("\\", "/")
-        script_type = self.script_type.currentText()
-        text = get_script_template(script_type, key, gmx_norm)
-        self.script_edit.setPlainText(text)
+        if hasattr(self, "script_tab"):
+            self.script_tab.load_script_template(key)
 
     def _save_script(self):
-        wd = self._get_work_dir() or os.getcwd()
-        fname, _ = QFileDialog.getSaveFileName(self, "保存脚本", wd, "脚本文件 (*.ps1 *.bat *.txt);;所有文件 (*.*)")
-        if fname:
-            with open(fname, "w", encoding="utf-8") as f:
-                f.write(self.script_edit.toPlainText())
-            self.add_log(f"脚本已保存到: {fname}", "success")
+        if hasattr(self, "script_tab"):
+            self.script_tab.save_script()
 
     def _load_script(self):
-        wd = self._get_work_dir() or os.getcwd()
-        fname, _ = QFileDialog.getOpenFileName(self, "加载脚本", wd, "脚本文件 (*.ps1 *.bat *.txt);;所有文件 (*.*)")
-        if fname:
-            with open(fname, "r", encoding="utf-8", errors="ignore") as f:
-                self.script_edit.setPlainText(f.read())
-            self.add_log(f"脚本已加载: {fname}", "info")
+        if hasattr(self, "script_tab"):
+            self.script_tab.load_script()
 
     def run_script(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        script_text = self.script_edit.toPlainText().strip()
-        if not script_text:
-            self.add_log("脚本内容为空，请先输入或加载脚本。", "error")
-            return
-
-        script_type = self.script_type.currentText()
-        step_name = "自定义脚本"
-        self.add_log("=" * 60, "cmd")
-        self.add_log(f"运行 {script_type}", "cmd")
-        self.add_log("=" * 60, "cmd")
-
-        # 创建临时脚本文件
-        tmp_dir = wd
-        if "PowerShell" in script_type:
-            script_file = os.path.join(tmp_dir, "_gmx_gui_script.ps1")
-            with open(script_file, "w", encoding="utf-8") as f:
-                f.write(script_text)
-            cmd = [["powershell", "-ExecutionPolicy", "Bypass", "-File", script_file]]
-        elif "Batch" in script_type:
-            script_file = os.path.join(tmp_dir, "_gmx_gui_script.bat")
-            with open(script_file, "w", encoding="utf-8") as f:
-                f.write(f"@echo off\ncd /d \"{wd}\"\nset GMX={self.gmx_path}\n\n{script_text}")
-            cmd = [script_file]
-        else:
-            # 直接作为命令行命令执行
-            script_file = None
-            cmd = [["cmd", "/c", script_text]]
-
-        self.run_command(cmd, wd, step_name)
+        if hasattr(self, "script_tab"):
+            self.script_tab.run_script()
