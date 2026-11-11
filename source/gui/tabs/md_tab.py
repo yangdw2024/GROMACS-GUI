@@ -543,7 +543,10 @@ class MdTab(QWidget):
 
         evap_grid.addWidget(QLabel("蒸发来源:"), 5, 0)
         self.evap_source = QComboBox()
-        self.evap_source.addItems(["从底部删除（先蒸发最底下的组）", "从顶部删除（先蒸发最上面的组）"])
+        self.evap_source.addItem("GRO文件末尾顺序（兼容旧版默认）", "bottom")
+        self.evap_source.addItem("GRO文件开头顺序（兼容旧版）", "top")
+        self.evap_source.addItem("按空间 Z 坐标从顶部蒸发 (物理 Z-Top)", "z_top")
+        self.evap_source.addItem("按空间 Z 坐标从底部蒸发 (物理 Z-Bottom)", "z_bottom")
         evap_grid.addWidget(self.evap_source, 5, 1, 1, 3)
 
         self.evap_label_delete = QLabel("每轮删除数:")
@@ -1399,7 +1402,7 @@ class MdTab(QWidget):
                 end_loop = start_loop + loops - 1
 
                 self.log_requested.emit(f"开始蒸发溶剂: {resname}, 每轮删除{delete_num}个, 从第{start_loop}轮到第{end_loop}轮", "info")
-                delete_from = "bottom" if self.evap_source.currentIndex() == 0 else "top"
+                delete_from = self.evap_source.currentData() or ("bottom" if self.evap_source.currentIndex() == 0 else "top")
 
                 for i in range(start_loop, end_loop + 1):
                     loop_cmds, restart_cpt = build_evap_loop_commands(

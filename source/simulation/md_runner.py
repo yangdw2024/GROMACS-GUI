@@ -10,6 +10,27 @@ import os
 import shutil
 from typing import List, Optional, Tuple
 
+# ---------------------------------------------------------------------------
+# grompp 告警安全边界策略 (治理 Issue #2)
+# - DEFAULT_MAXWARN = 2: 标准 EM / NVT / NPT / MD 编译告警上限
+# - SA_SAFE_MAXWARN = 5: 蒸发/退火场景允许的已知非致命警告上限（如电荷舍入/Barostat提示），
+#   严禁使用 -maxwarn 200 等盲目放行高阈值，防止掩盖真实拓扑或参数错误。
+# - MAXWARN_HARD_CAP = 10: 代码层面允许传入的最高安全上限
+# ---------------------------------------------------------------------------
+DEFAULT_MAXWARN = 2
+SA_SAFE_MAXWARN = 5
+MAXWARN_HARD_CAP = 10
+
+
+def validate_maxwarn(maxwarn: Optional[int], default: int = DEFAULT_MAXWARN) -> int:
+    val = default if maxwarn is None else int(maxwarn)
+    if val < 0 or val > MAXWARN_HARD_CAP:
+        raise ValueError(
+            f"不安全的 grompp -maxwarn 阈值: {val}（允许范围为 0~{MAXWARN_HARD_CAP}，"
+            "请先修复拓扑/MDP警告而非盲目放大 -maxwarn）"
+        )
+    return val
+
 
 # =============================================================================
 # 辅助：构建 mdrun 命令（Step 6/8/10/12 共用）
@@ -271,12 +292,14 @@ def build_md_step_command(step_key: str, gmx: str, state: dict):
 
 def build_annealing_commands(
     gmx: str, prefix: str, gro_path: str, top_path: str,
-    mdp_file: str, mdrun_extra: List[str], wd: str
+    mdp_file: str, mdrun_extra: List[str], wd: str,
+    maxwarn: Optional[int] = None
 ) -> Tuple[List[str], List[str]]:
     """构建退火模拟的 grompp + mdrun 命令
 
     返回 (grompp_cmd, mdrun_cmd)
     """
+    mw = validate_maxwarn(maxwarn, default=SA_SAFE_MAXWARN)
     tpr_file = os.path.join(wd, f"{prefix}.tpr")
     grompp_cmd = [
         gmx, "grompp",
@@ -284,7 +307,7 @@ def build_annealing_commands(
         "-c", gro_path,
         "-p", top_path,
         "-o", tpr_file,
-        "-maxwarn", "200"
+        "-maxwarn", str(mw)
     ]
     deffnm = os.path.join(wd, prefix)
     mdrun_cmd = [gmx, "mdrun", "-v", "-deffnm", deffnm] + list(mdrun_extra)
@@ -400,7 +423,8 @@ def build_evap_loop_commands(
     work_gro: str, work_top: str, current_gro: str, current_top: str,
     mdrun_extra: List[str], wd: str,
     restart_check: bool = False, start_loop: int = 1,
-    mode: str = "solvent"
+    mode: str = "solvent",
+    maxwarn: Optional[int] = None
 ) -> Tuple[List[List[str]], Optional[str]]:
     """构建蒸发单轮命令列表
 
@@ -522,11 +546,12 @@ def build_evap_loop_commands(
     else:
         # 路径 1 / 2（连续新一轮计算 / 从已完成上一轮继续新一轮）：
         # grompp 使用 pending_top，待 mdrun 成功后再将 pending_top 提交至 work_top，确保中断时 pending_top 留存供同轮恢复校验
+        mw = validate_maxwarn(maxwarn, default=SA_SAFE_MAXWARN)
         commands.extend([
             del_cmd,
             _move_cmd(new_gro, work_gro),
             [gmx, "grompp", "-f", mdp_file, "-c", work_gro,
-             "-p", pending_top, "-o", tpr_file, "-maxwarn", "200"],
+             "-p", pending_top, "-o", tpr_file, "-maxwarn", str(mw)],
             mdrun_cmd,
             _move_cmd(pending_top, work_top),
         ])

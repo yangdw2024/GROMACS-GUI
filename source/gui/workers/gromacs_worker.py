@@ -32,6 +32,8 @@ class GromacsWorker(QThread):
         self.stdin_input = stdin_input
         self.process = None
         self._is_running = True
+        self.stopped_by_user = False
+        self.outcome_status = "unknown"
         self.current_cmd_index = 0
         self._job_handle = None
 
@@ -44,10 +46,17 @@ class GromacsWorker(QThread):
             self.current_cmd_index = idx
             success = self._run_single(cmd)
             if self.step_name:
-                self.step_finished_signal.emit(self.step_name, success)
-            if not success:
+                self.step_finished_signal.emit(self.step_name, success and self._is_running)
+            if not success or not self._is_running:
                 overall_success = False
                 break
+        if self.stopped_by_user:
+            self.outcome_status = "stopped"
+            overall_success = False
+        elif overall_success:
+            self.outcome_status = "success"
+        elif self.outcome_status == "unknown":
+            self.outcome_status = "failed"
         self._close_job()
         self.finished_signal.emit(overall_success)
 
@@ -224,15 +233,29 @@ class GromacsWorker(QThread):
                 for line in self.process.stdout:
                     self._emit_line(line)
 
-            return_code = self.process.returncode
+            try:
+                return_code = self.process.wait(timeout=5)
+            except Exception:
+                return_code = self.process.poll()
+
+            if not self._is_running or self.stopped_by_user:
+                self.outcome_status = "stopped"
+                self.log_signal.emit("[STOPPED] 任务已被用户停止，现场文件已保留", "warning")
+                return False
+            if return_code is None:
+                self.outcome_status = "unknown"
+                self.log_signal.emit("[ERROR] 无法确认进程退出状态 (returncode=None)", "error")
+                return False
             if return_code == 0:
                 self.log_signal.emit(f"[OK] 命令执行成功 (returncode=0)", "success")
                 return True
             else:
+                self.outcome_status = "failed"
                 self.log_signal.emit(f"[ERROR] 命令执行失败 (returncode={return_code})", "error")
                 return False
 
         except Exception as e:
+            self.outcome_status = "failed"
             self.log_signal.emit(f"[ERROR] 执行异常: {str(e)}", "error")
             return False
 
@@ -253,6 +276,7 @@ class GromacsWorker(QThread):
 
     def stop(self):
         self._is_running = False
+        self.stopped_by_user = True
         if self.process:
             try:
                 # 优先尝试优雅终止，给GROMACS写入CPT检查点的时间

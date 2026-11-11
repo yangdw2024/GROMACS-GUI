@@ -64,7 +64,46 @@ def delete_solvent_molecules(gro_file, output_file, solvent_name, delete_num, at
 
     header, num_atoms, atoms, box = read_gro_file(gro_file)
 
-    if delete_from == "bottom":
+    if delete_from in ("z_top", "z_bottom"):
+        # 按空间 Z 坐标排序删除溶剂分子（计算每个溶剂分子的几何中心 z 坐标）
+        mol_blocks = []
+        non_solvent = []
+        i = 0
+        while i < len(atoms):
+            if atoms[i][5:10].strip() == solvent_name:
+                if i + atoms_per_solvent > len(atoms):
+                    raise ValueError(f"文件末尾发现不完整的 {solvent_name} 分子块")
+                block = atoms[i:i + atoms_per_solvent]
+                for a in block:
+                    if a[5:10].strip() != solvent_name:
+                        raise ValueError(f"第 {i+3} 行附近发现不完整的 {solvent_name} 分子块")
+                try:
+                    z_center = sum(float(a[36:44]) for a in block) / atoms_per_solvent
+                except (ValueError, IndexError) as exc:
+                    raise ValueError(f"解析 {solvent_name} 分子 Z 坐标失败 (行 {i+3})") from exc
+                mol_blocks.append((z_center, i, block))
+                i += atoms_per_solvent
+            else:
+                non_solvent.append((i, [atoms[i]]))
+                i += 1
+
+        if len(mol_blocks) < delete_num:
+            raise ValueError(
+                f"GRO 中可删除的 {solvent_name} 分子数不足: 请求删除 {delete_num}，实际仅找到 {len(mol_blocks)}"
+            )
+
+        # z_top 优先删除 Z 最大的分子；z_bottom 优先删除 Z 最小的分子
+        sorted_mols = sorted(mol_blocks, key=lambda x: x[0], reverse=(delete_from == "z_top"))
+        delete_start_indices = {m[1] for m in sorted_mols[:delete_num]}
+
+        kept_pieces = [
+            (m[1], m[2]) for m in mol_blocks if m[1] not in delete_start_indices
+        ] + non_solvent
+        kept_pieces.sort(key=lambda x: x[0])
+        kept = []
+        for _, chunk in kept_pieces:
+            kept.extend(chunk)
+    elif delete_from == "bottom":
         # 从 gro 文件末尾向前扫描，删除最后出现的溶剂分子
         removed = 0
         i = len(atoms) - atoms_per_solvent
@@ -206,8 +245,8 @@ def main():
     parser.add_argument('--delete-num', type=int, required=True, help="要删除的溶剂分子数量")
     parser.add_argument('--atoms-per-mol', type=int, default=5, help="每个溶剂分子的原子数，默认5")
     parser.add_argument('--loop', type=int, required=True, help="当前循环次数")
-    parser.add_argument('--delete-from', choices=['top', 'bottom'], default='bottom',
-                        help="删除顺序: top=从开头/顶部删除, bottom=从末尾/底部删除(默认)")
+    parser.add_argument('--delete-from', choices=['top', 'bottom', 'z_top', 'z_bottom'], default='bottom',
+                        help="删除顺序: bottom=GRO末尾(默认兼容), top=GRO开头(兼容), z_top=空间Z坐标顶部, z_bottom=空间Z坐标底部")
     parser.add_argument('--input', required=True, help="输入gro文件")
     parser.add_argument('--output', required=True, help="输出gro文件")
     parser.add_argument('--topology', required=True, help="输入top文件")

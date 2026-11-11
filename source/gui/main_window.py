@@ -1664,7 +1664,13 @@ class GromacsGUI(QMainWindow):
             pass
 
     def closeEvent(self, event):
-        """窗口关闭时保存持久化配置"""
+        """窗口关闭时优雅清理后台任务并保存持久化配置"""
+        try:
+            if getattr(self, "worker", None) is not None and self.worker.isRunning():
+                self.worker.stop()
+                self.worker.wait(3000)
+        except Exception:
+            pass
         self._save_persistent_config()
         super().closeEvent(event)
 
@@ -2832,10 +2838,29 @@ class GromacsGUI(QMainWindow):
 
     def on_finished(self, success):
         self.add_log(f"{'='*60}", "cmd")
-        if success:
+        outcome = getattr(self.worker, "outcome_status", "success" if success else "failed")
+        if success and outcome == "success":
             self.add_log("任务成功完成!", "success")
+            # 可选后置安全自检（若执行过 mdrun 且存在 .log 文件，检查非有限数值/LINCS 崩溃）
+            try:
+                from simulation.validation import validate_md_log
+                import glob
+                wd = self.path_edit.text().strip() if hasattr(self, "path_edit") else ""
+                if wd and os.path.isdir(wd) and "mdrun" in getattr(self, "_current_command", ""):
+                    logs = sorted(glob.glob(os.path.join(wd, "*.log")), key=os.path.getmtime, reverse=True)
+                    if logs:
+                        vres = validate_md_log(logs[0])
+                        for issue in vres.issues:
+                            lvl = "error" if issue.severity == "BLOCKED" else "warning"
+                            self.add_log(f"[物理一致性检查] {issue.message}", lvl)
+            except Exception:
+                pass
+        elif outcome == "stopped":
+            self.add_log("任务已被用户主动停止，现场工作文件与检查点已保留。", "warning")
+        elif outcome == "unknown":
+            self.add_log("任务状态无法确认（未获取到有效退出码），请检查输出与日志。", "error")
         else:
-            self.add_log("任务失败或被中断!", "error")
+            self.add_log("任务执行失败!", "error")
             self._run_error_diagnosis()
         self.add_log(f"{'='*60}", "cmd")
         self._set_running_state(False)

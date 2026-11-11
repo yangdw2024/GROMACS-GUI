@@ -225,9 +225,21 @@ def test_annealing_commands(tmp_path):
         "anneal.mdp", ["-ntmpi", "1"], str(tmp_path)
     )
     assert grompp[0:3] == ["gmx", "grompp", "-f"]
-    assert "-maxwarn" in grompp and "200" in grompp
+    assert "-maxwarn" in grompp and "5" in grompp
+    assert "200" not in grompp
     assert "mdrun" in mdrun
     assert "-deffnm" in mdrun
+
+
+def test_maxwarn_safety_policy_rejects_high_threshold(tmp_path):
+    """验证 grompp -maxwarn 安全门禁：允许 0~10，拒绝如 200 等无依据高阈值"""
+    from simulation.md_runner import validate_maxwarn, build_annealing_commands
+    assert validate_maxwarn(None) == 2
+    assert validate_maxwarn(5) == 5
+    with pytest.raises(ValueError):
+        validate_maxwarn(200)
+    with pytest.raises(ValueError):
+        build_annealing_commands("gmx", "a", "in.gro", "t.top", "m.mdp", [], str(tmp_path), maxwarn=50)
 
 
 # =============================================================================
