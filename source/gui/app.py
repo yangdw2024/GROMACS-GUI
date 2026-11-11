@@ -28,13 +28,31 @@ from PyQt5.QtGui import QColor, QPalette
 from gui.main_window import GromacsGUI
 
 
+def _get_writable_app_dir():
+    """获取可写的配置/日志/锁目录：优先尝试程序所在目录（便携版），只读目录（如 Program Files）则回退至用户目录"""
+    if getattr(sys, 'frozen', False):
+        candidate = os.path.dirname(sys.executable)
+    else:
+        candidate = os.path.dirname(os.path.abspath(__file__))
+
+    try:
+        test_file = os.path.join(candidate, f"._write_probe_{os.getpid()}")
+        with open(test_file, "w") as f:
+            f.write("ok")
+        os.remove(test_file)
+        return candidate
+    except OSError:
+        if sys.platform == "win32":
+            fallback = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "GROMACS-GUI")
+        else:
+            fallback = os.path.expanduser("~/.gromacs_gui")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
+
+
 def _get_config_path():
     """获取配置文件路径"""
-    if getattr(sys, 'frozen', False):
-        base = os.path.dirname(sys.executable)
-    else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, 'gromacs_gui_config.json')
+    return os.path.join(_get_writable_app_dir(), 'gromacs_gui_config.json')
 
 
 def _check_license_agreement():
@@ -154,10 +172,7 @@ _instance_lock = None
 
 def _check_single_instance():
     global _instance_lock
-    if getattr(sys, 'frozen', False):
-        base = os.path.dirname(sys.executable)
-    else:
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base = _get_writable_app_dir()
     lock_file = os.path.join(base, "gromacs_gui.lock")
     
     try:
@@ -186,7 +201,34 @@ def _check_single_instance():
 
 def run_main():
         _setup_exception_handler()
-    
+        is_smoke_test = ("--smoke-test" in sys.argv)
+        if is_smoke_test:
+            os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+        for stream in (sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, "reconfigure"):
+                try:
+                    stream.reconfigure(encoding="utf-8", errors="replace")
+                except Exception:
+                    pass
+
+        app = QApplication(sys.argv)
+        app.setStyle("Fusion")
+
+        if is_smoke_test:
+            try:
+                window = GromacsGUI()
+                window.setAttribute(Qt.WA_DontShowOnScreen, True)
+                assert window.tab_widget.count() == 7
+                print(f"SMOKE_TEST_OK version={VERSION_CONFIG.get('version_string')} tabs={window.tab_widget.count()}", flush=True)
+                window.close()
+                return 0
+            except Exception as exc:
+                print(f"SMOKE_TEST_FAILED: {exc}", flush=True)
+                return 1
+            finally:
+                app.quit()
+
         if not _check_single_instance():
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Warning)
@@ -194,9 +236,6 @@ def run_main():
             msg.setText("GROMACS GUI 已经在运行中！\n\n请先关闭已有的实例，再重新启动。")
             msg.exec_()
             sys.exit(0)
-    
-        app = QApplication(sys.argv)
-        app.setStyle("Fusion")
 
         # 检查使用协议
         if not _check_license_agreement():

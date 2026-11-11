@@ -380,6 +380,23 @@ class ResourceMonitor:
             pass
 
         try:
+            # 优先在 Windows 上使用无子进程的原生 IsProcessorFeaturePresent 检测 SIMD，
+            # 避免打包版 (PyInstaller frozen) 下 py-cpuinfo 调用 sys.executable 引发死循环或挂起
+            if sys.platform == "win32" and getattr(sys, "frozen", False):
+                import ctypes
+                k32 = ctypes.windll.kernel32
+                feature_map = [
+                    ("sse2", 10), ("sse3", 13), ("sse4_1", 37), ("sse4_2", 38),
+                    ("avx", 39), ("avx2", 40), ("avx512f", 41),
+                ]
+                simd_flags = [name for name, fid in feature_map if k32.IsProcessorFeaturePresent(fid)]
+                cpu_info["simd_support"] = simd_flags
+                cpu_info["avx512"] = "avx512f" in simd_flags
+                cpu_info["avx2"] = "avx2" in simd_flags
+                cpu_info["avx"] = "avx" in simd_flags
+                cpu_info["sse4_2"] = "sse4_2" in simd_flags
+                return cpu_info
+
             try:
                 from cpuinfo import get_cpu_info
                 info = get_cpu_info()
