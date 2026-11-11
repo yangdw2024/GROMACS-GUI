@@ -133,27 +133,69 @@ def test_script_tab_config_persistence(script_tab):
     assert script_tab.script_edit.toPlainText() == "test_config_content = 123"
 
 
-def test_main_window_script_tab_integration(qapp, tmp_path):
-    """测试 6: 验证主窗口 GromacsGUI 挂载 ScriptTab 后的完整功能与属性别名兼容"""
+def test_main_window_script_tab_integration_and_run_script(qapp, tmp_path):
+    """测试 6: 验证主窗口挂载 ScriptTab 的属性兼容、信号槽分发以及直接调用 win.run_script() 零残留与防重发"""
+    import unittest.mock as mock
     from gui.main_window import GromacsGUI
-    win = GromacsGUI()
-    win.setAttribute(Qt.WA_DontShowOnScreen, True)
 
-    assert hasattr(win, "script_tab")
-    assert hasattr(win, "script_type")
-    assert hasattr(win, "script_edit")
-    assert hasattr(win, "script_run_btn")
-    assert win.script_type is win.script_tab.script_type
-    assert win.script_edit is win.script_tab.script_edit
+    with mock.patch("PyQt5.QtWidgets.QMessageBox.warning") as mock_warn, \
+         mock.patch("PyQt5.QtWidgets.QMessageBox.information") as mock_info, \
+         mock.patch("PyQt5.QtWidgets.QMessageBox.critical") as mock_crit:
 
-    # 验证主窗口的 Part 7 运行命令调度连接
-    win.path_edit.setText(str(tmp_path))
-    win.script_type.setCurrentText("Shell 命令")
-    win.script_edit.setPlainText("echo integration_test")
+        win = GromacsGUI()
+        win.setAttribute(Qt.WA_DontShowOnScreen, True)
 
-    # 模拟点击运行脚本，验证主窗口调用 run_command 且无异常崩溃
-    win.script_run_btn.click()
-    qapp.processEvents()
-    assert "自定义脚本" in win.log_text.toPlainText()
+        try:
+            # 1. 属性与控件引用兼容性验证
+            assert hasattr(win, "script_tab")
+            assert hasattr(win, "script_type")
+            assert hasattr(win, "script_edit")
+            assert hasattr(win, "script_run_btn")
+            assert win.script_type is win.script_tab.script_type
+            assert win.script_edit is win.script_tab.script_edit
+            assert win.script_run_btn is win.script_tab.script_run_btn
 
-    win.close()
+            # 2. 关键依赖隔离：使用 Mock 替代实际的任务派发，避免在测试中启动真实进程或后台 QThread
+            run_cmd_mock = mock.MagicMock()
+            win.run_command = run_cmd_mock
+
+            # 重新连接 signal 到 mock（保证测试独立性）
+            win.script_tab.run_requested.disconnect()
+            win.script_tab.run_requested.connect(run_cmd_mock)
+
+            win.path_edit.setText(str(tmp_path))
+            win.script_type.setCurrentText("Shell 命令")
+            win.script_edit.setPlainText("echo test_headless")
+
+            # 3. 模拟点击脚本运行按钮，验证通过信号正确派发一次
+            win.script_run_btn.click()
+            qapp.processEvents()
+
+            assert run_cmd_mock.call_count == 1
+            cmd_args, _ = run_cmd_mock.call_args
+            assert cmd_args[0] == [["cmd", "/c", "echo test_headless"]]
+            assert cmd_args[1] == str(tmp_path)
+            assert cmd_args[2] == "自定义脚本"
+
+            # 4. 直接调用主窗口的兼容方法 win.run_script()
+            run_cmd_mock.reset_mock()
+            # 验证不会抛出 NameError 且准确派发一次，无重复派发
+            win.run_script()
+            qapp.processEvents()
+
+            assert run_cmd_mock.call_count == 1
+            cmd_args2, _ = run_cmd_mock.call_args
+            assert cmd_args2[0] == [["cmd", "/c", "echo test_headless"]]
+            assert cmd_args2[1] == str(tmp_path)
+            assert cmd_args2[2] == "自定义脚本"
+
+            # 验证期间没有任何模态弹窗阻塞
+            assert mock_warn.call_count == 0
+            assert mock_crit.call_count == 0
+
+        finally:
+            if getattr(win, "worker", None) is not None and win.worker.isRunning():
+                win.worker.stop()
+                win.worker.wait(1000)
+            win.close()
+            qapp.processEvents()

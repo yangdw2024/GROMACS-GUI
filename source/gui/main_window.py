@@ -7094,5 +7094,3 @@ class GromacsGUI(QMainWindow):
     def run_script(self):
         if hasattr(self, "script_tab"):
             self.script_tab.run_script()
-
-        self.run_command(cmd, wd, step_name)
