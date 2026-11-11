@@ -1,38 +1,34 @@
 # 工程状态实时检查点
 ## Checkpoint
 
-本文件用于全自动会话中断恢复。任何时刻重启任务，必须首先读取本文件确定工程阶段、代码基线及下一步明确动作。
-
 ---
 
 ## 一、当前工程基线
 
-- **时间戳**：`2026-11-12 00:00:00`
+- **时间戳**：`2026-11-12`
 - **当前仓库路径**：`D:\YDW\Trae_Gromacs`
-- **当前活跃 Worktree**：`D:\YDW\Trae_Gromacs\scratch\wt_eng`
-- **当前分支**：`chore/setup-engineering-governance`
-- **dev 分支最新 Commit SHA**：`bce87528b5809eefc757384301ed31ffd53ced5a` (已合入 PR #6)
-- **master 分支最新 Commit SHA**：`aa537c6d33151fbf6e919f3bd768aded90351bac` (保持稳定待最终发布)
-- **主目录保护状态**：原工作区内 5 个未提交业务文件完整保留，所有修改严格限定在 `scratch/` 独立 worktree 中。
+- **主分支 (`master`) SHA**：`aa537c6d33151fbf6e919f3bd768aded90351bac`（严格保护，待版权人明确协议冲突解决方案后再决定正式合并）
+- **开发主分支 (`dev`) 最新基线**：已合入 PR #1, #3, #4, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18
+- **主目录保护状态**：原主工作目录内原有的 5 个未提交修改完整保护、零污染。
 
 ---
 
-## 二、当前执行状态
+## 二、当前执行状态与收尾交接
 
-- **正在推进任务**：`P0.1` 建立工程管理机制与 10 个核心治理文档（所属里程碑 `M0`）。
-- **已完成任务**：
-  - `P0` 完成 PR #6（Part 6 MMPBSA 页面抽离至 `source/gui/tabs/mmpbsa_tab.py`，CI 成功，已合并 dev，Merge SHA `bce87528`）。
-  - 创建 Issue #5（MMPBSA 功能差距）与 Issue #2（计算安全技术债）。
-- **下一步即刻动作**：
-  1. 完成 `docs/engineering/` 10 个文档的建立与初始提交；
-  2. 提交 PR 并合并至 `dev`；
-  3. 启动 `M1`：以最新 `dev` 为基线开启 `refactor/extract-trajectory-tab` 分支，抽离 Part 4 轨迹处理页面。
+- **已完成全部可执行工程里程碑 (M0–M6)**：
+  - 七大功能页面全面拆分为 `source/gui/tabs/` 独立组件；
+  - 完整 Design System + 实拍视觉修正 + 多分辨率几何零重叠门禁；
+  - 完整中英文双语系统（`source/gui/i18n.py`）与命令语言无关性解耦；
+  - Issue #2 与 Issue #5 科研安全性及 MMPBSA 功能增强全面落实（Issue #5 已关闭）；
+  - GitHub Actions 升级为 Ubuntu + Windows 双系统 × Python 3.11/3.12 四路 CI 矩阵全绿；
+  - Windows 便携生产构建 + 干净解压 `--smoke-test` 验证通过，并产出预发布候选版本 `v4.4.0-rc.1`。
 
 ---
 
-## 三、现场安全恢复方法
+## 三、待用户裁决的正式发布阻断项（P18 / P21）
 
-若外部环境中断或需回退到稳定状态：
-1. 检查 `git worktree list`，确认当前处于隔离环境；
-2. 若当前 worktree 异常，可安全执行 `git worktree remove --force scratch/wt_eng`；
-3. 基于 `origin/dev`（`bce87528`）重新建立 worktree 即可 100% 恢复洁净环境，原主工作区绝不丢失任何数据。
+1. **开源许可证冲突确认**：需版权人选择：
+   - 方案 A：坚持纯 MIT License，移除 `source/gui/app.py:73` 中的非商业限制句；
+   - 方案 B：维持非商业限制，将根目录 `LICENSE` 更换为 CC BY-NC-SA 4.0 或 PolyForm Noncommercial 1.0.0。
+2. **可选构建工具**：如需生成 Windows `.exe` 向导安装器（在便携版 `.zip` 之外），需在具备 Inno Setup (`iscc.exe`) 的机器上编译 `build_scripts/installer_v43.iss`。
+3. 待上述确认完成并合并 `dev` 至 `master` 后，即可正式发布 `v4.4.0` 稳定版 Release。
