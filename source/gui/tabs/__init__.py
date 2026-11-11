@@ -5,5 +5,6 @@ GROMACS-GUI 独立功能页组件包
 """
 
 from .script_tab import ScriptTab
+from .mmpbsa_tab import MmpbsaTab
 
-__all__ = ["ScriptTab"]
+__all__ = ["ScriptTab", "MmpbsaTab"]
