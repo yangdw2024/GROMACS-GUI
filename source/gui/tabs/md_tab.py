@@ -32,6 +32,7 @@ from simulation.md_runner import (
     write_delete_script, setup_evap_work_files
 )
 from gui.embedded_scripts import DELETE_SOLVENT_SCRIPT, DELETE_ADDITIVE_SCRIPT
+from gui.i18n import tr
 
 class MdTab(QWidget):
     """Part 1: 分子动力学全流程模拟独立页面组件
@@ -105,8 +106,8 @@ class MdTab(QWidget):
         vbox.setContentsMargins(8, 10, 8, 10)
 
         # 1. 全局模拟参数
-        common_group = QGroupBox("全局模拟参数")
-        ggrid = QGridLayout(common_group)
+        self.common_group = QGroupBox(tr("md_global_group"))
+        ggrid = QGridLayout(self.common_group)
         ggrid.setSpacing(6)
 
         self.md_ff = QComboBox()
@@ -126,7 +127,8 @@ class MdTab(QWidget):
         self.md_box_type.currentTextChanged.connect(self._on_box_type_changed)
 
         self.md_box_size_mode = QComboBox()
-        self.md_box_size_mode.addItems(["按边距 (-d)", "按盒子边长 (-box)"])
+        self.md_box_size_mode.addItem("按边距 (-d)", "margin")
+        self.md_box_size_mode.addItem("按盒子边长 (-box)", "box")
         self.md_box_size_mode.currentTextChanged.connect(self._on_box_size_mode_changed)
 
         self.md_box_size = QDoubleSpinBox()
@@ -247,7 +249,8 @@ class MdTab(QWidget):
         ggrid.addWidget(QLabel("盒子类型:"), 1, 0)
         self.lbl_box_type = ggrid.itemAtPosition(1, 0).widget()
         ggrid.addWidget(self.md_box_type, 1, 1)
-        ggrid.addWidget(QLabel("设置方式:"), 1, 2)
+        self.lbl_box_mode = QLabel(tr("md_box_mode"))
+        ggrid.addWidget(self.lbl_box_mode, 1, 2)
         ggrid.addWidget(self.md_box_size_mode, 1, 3)
 
         self.lbl_box_size = QLabel("盒子边距:")
@@ -318,33 +321,39 @@ class MdTab(QWidget):
         ggrid.addWidget(QLabel("离子浓度:"), 2, 0)
         self.lbl_ion = ggrid.itemAtPosition(2, 0).widget()
         ggrid.addWidget(self.md_ion_conc, 2, 1)
-        ggrid.addWidget(QLabel("温度:"), 2, 2)
+        self.lbl_temp = QLabel(tr("md_temp"))
+        ggrid.addWidget(self.lbl_temp, 2, 2)
         ggrid.addWidget(self.md_temp, 2, 3)
 
-        ggrid.addWidget(QLabel("压力:"), 3, 0)
+        self.lbl_press = QLabel(tr("md_press"))
+        ggrid.addWidget(self.lbl_press, 3, 0)
         ggrid.addWidget(self.md_pressure, 3, 1)
-        ggrid.addWidget(QLabel("积分步长:"), 3, 2)
+        self.lbl_dt = QLabel(tr("md_dt"))
+        ggrid.addWidget(self.lbl_dt, 3, 2)
         ggrid.addWidget(self.md_dt, 3, 3)
 
-        ggrid.addWidget(QLabel("模拟步数:"), 4, 0)
+        self.lbl_nsteps = QLabel(tr("md_nsteps"))
+        ggrid.addWidget(self.lbl_nsteps, 4, 0)
         ggrid.addWidget(self.md_nsteps, 4, 1)
-        ggrid.addWidget(QLabel("计算引擎:"), 4, 2)
+        self.lbl_engine = QLabel(tr("md_engine"))
+        ggrid.addWidget(self.lbl_engine, 4, 2)
         ggrid.addWidget(self.md_engine, 4, 3)
 
-        ggrid.addWidget(QLabel("线程数:"), 5, 0)
+        self.lbl_nt = QLabel(tr("md_nt"))
+        ggrid.addWidget(self.lbl_nt, 5, 0)
         ggrid.addWidget(self.md_nt, 5, 1)
         ggrid.addWidget(QLabel("输入PDB:"), 5, 2)
         self.lbl_pdb = ggrid.itemAtPosition(5, 2).widget()
         ggrid.addLayout(md_pdb_layout, 5, 3)
 
-        vbox.addWidget(common_group)
+        vbox.addWidget(self.common_group)
 
         self.md_step_btns = {}
 
         # === 第一阶段: 结构准备 ===
-        prep_phase = QGroupBox("📦 第一阶段: 结构准备 (Step 1-4)")
-        prep_phase.setProperty("role", "phaseGroup")
-        prep_layout = QVBoxLayout(prep_phase)
+        self.prep_phase = QGroupBox(tr("md_phase_prep"))
+        self.prep_phase.setProperty("role", "phaseGroup")
+        prep_layout = QVBoxLayout(self.prep_phase)
         prep_layout.setSpacing(6)
 
         step1 = self._create_step_group(
@@ -404,12 +413,12 @@ class MdTab(QWidget):
         )
         prep_layout.addWidget(step4)
 
-        vbox.addWidget(prep_phase)
+        vbox.addWidget(self.prep_phase)
 
         # === 第二阶段: 能量最小化 ===
-        em_phase = QGroupBox("⚡ 第二阶段: 能量最小化 (Step 5-6)")
-        em_phase.setProperty("role", "phaseGroup")
-        em_layout = QVBoxLayout(em_phase)
+        self.em_phase = QGroupBox(tr("md_phase_em"))
+        self.em_phase.setProperty("role", "phaseGroup")
+        em_layout = QVBoxLayout(self.em_phase)
         em_layout.setSpacing(6)
 
         step5 = self._create_step_group(
@@ -428,12 +437,12 @@ class MdTab(QWidget):
         )
         em_layout.addWidget(step6)
 
-        vbox.addWidget(em_phase)
+        vbox.addWidget(self.em_phase)
 
         # === 第三阶段: 平衡模拟 ===
-        equil_phase = QGroupBox("⚖️ 第三阶段: 平衡模拟 (Step 7-10)")
-        equil_phase.setProperty("role", "phaseGroup")
-        equil_layout = QVBoxLayout(equil_phase)
+        self.equil_phase = QGroupBox(tr("md_phase_equil"))
+        self.equil_phase.setProperty("role", "phaseGroup")
+        equil_layout = QVBoxLayout(self.equil_phase)
         equil_layout.setSpacing(6)
 
         step7 = self._create_step_group(
@@ -468,12 +477,12 @@ class MdTab(QWidget):
         )
         equil_layout.addWidget(step10)
 
-        vbox.addWidget(equil_phase)
+        vbox.addWidget(self.equil_phase)
 
         # === 第四阶段: 生产模拟 ===
-        prod_phase = QGroupBox("🚀 第四阶段: 生产模拟 (Step 11-12)")
-        prod_phase.setProperty("role", "phaseGroup")
-        prod_layout = QVBoxLayout(prod_phase)
+        self.prod_phase = QGroupBox(tr("md_phase_prod"))
+        self.prod_phase.setProperty("role", "phaseGroup")
+        prod_layout = QVBoxLayout(self.prod_phase)
         prod_layout.setSpacing(6)
 
         step11 = self._create_step_group(
@@ -492,12 +501,12 @@ class MdTab(QWidget):
         )
         prod_layout.addWidget(step12)
 
-        vbox.addWidget(prod_phase)
+        vbox.addWidget(self.prod_phase)
 
         # === 第五阶段: 溶剂/添加剂蒸发 ===
-        evap_phase = QGroupBox("🔥 第五阶段: 溶剂/添加剂蒸发")
-        evap_phase.setProperty("role", "phaseGroup")
-        evap_layout = QVBoxLayout(evap_phase)
+        self.evap_phase = QGroupBox(tr("md_phase_evap"))
+        self.evap_phase.setProperty("role", "phaseGroup")
+        evap_layout = QVBoxLayout(self.evap_phase)
         evap_layout.setSpacing(8)
 
         evap_config = QGroupBox("蒸发配置")
@@ -582,16 +591,16 @@ class MdTab(QWidget):
         evap_layout.addWidget(tip)
 
         self.evap_run_btn = QPushButton("🚀 开始蒸发")
-        self.evap_run_btn.setProperty("role", "browseBtn")
+        self.evap_run_btn.setProperty("role", "primaryRun")
         self.evap_run_btn.clicked.connect(self.run_evap_step)
         evap_layout.addWidget(self.evap_run_btn)
 
-        vbox.addWidget(evap_phase)
+        vbox.addWidget(self.evap_phase)
 
         # === 第六阶段: 退火模拟 ===
-        anneal_phase = QGroupBox("🌡️ 第六阶段: 退火模拟 (Simulated Annealing)")
-        anneal_phase.setProperty("role", "phaseGroup")
-        anneal_layout = QVBoxLayout(anneal_phase)
+        self.anneal_phase = QGroupBox(tr("md_phase_anneal"))
+        self.anneal_phase.setProperty("role", "phaseGroup")
+        anneal_layout = QVBoxLayout(self.anneal_phase)
         anneal_layout.setSpacing(8)
 
         anneal_config = QGroupBox("退火配置")
@@ -657,11 +666,11 @@ class MdTab(QWidget):
         anneal_layout.addWidget(anneal_config)
 
         self.anneal_run_btn = QPushButton("🚀 开始退火模拟")
-        self.anneal_run_btn.setProperty("role", "browseBtn")
+        self.anneal_run_btn.setProperty("role", "primaryRun")
         self.anneal_run_btn.clicked.connect(self.run_anneal_step)
         anneal_layout.addWidget(self.anneal_run_btn)
 
-        vbox.addWidget(anneal_phase)
+        vbox.addWidget(self.anneal_phase)
         vbox.addStretch()
 
     def _on_evap_mode_changed(self):
@@ -734,7 +743,8 @@ class MdTab(QWidget):
 
         layout.addWidget(QLabel("设置方式:"), row, 0)
         size_mode_combo = QComboBox()
-        size_mode_combo.addItems(["按边距 (-d)", "按盒子边长 (-box)"])
+        size_mode_combo.addItem("按边距 (-d)", "margin")
+        size_mode_combo.addItem("按盒子边长 (-box)", "box")
         layout.addWidget(size_mode_combo, row, 1, 1, 3)
         row += 1
 
@@ -841,7 +851,7 @@ class MdTab(QWidget):
         def _on_box_type_changed(text):
             is_rect = "rectangular" in text.lower()
             is_triclinic = "triclinic" in text.lower()
-            is_box_mode = "边长" in size_mode_combo.currentText()
+            is_box_mode = (size_mode_combo.currentData() == "box") or ("-box" in size_mode_combo.currentText().lower()) or ("边长" in size_mode_combo.currentText())
             is_single_val = is_box_mode and not is_rect and not is_triclinic
             show_xyz = is_rect and is_box_mode
             show_angles = is_triclinic and is_box_mode
@@ -1043,7 +1053,7 @@ class MdTab(QWidget):
     def _on_box_type_changed(self, text):
         is_rect = "rectangular" in text.lower()
         is_triclinic = "triclinic" in text.lower()
-        is_box_mode = "边长" in self.md_box_size_mode.currentText()
+        is_box_mode = (self.md_box_size_mode.currentData() == "box") or ("-box" in self.md_box_size_mode.currentText().lower()) or ("边长" in self.md_box_size_mode.currentText())
         is_single_val = is_box_mode and not is_rect and not is_triclinic
         show_xyz = is_rect and is_box_mode
         show_angles = is_triclinic and is_box_mode
@@ -1086,7 +1096,7 @@ class MdTab(QWidget):
             bt = "triclinic"
         is_rect = "rectangular" in bt_full.lower()
         is_triclinic = "triclinic" in bt_full.lower()
-        is_box_mode = "边长" in self.md_box_size_mode.currentText()
+        is_box_mode = (self.md_box_size_mode.currentData() == "box") or ("-box" in self.md_box_size_mode.currentText().lower()) or ("边长" in self.md_box_size_mode.currentText())
         params = []
         if self.md_princ.isChecked():
             params.append("-princ")
@@ -1126,8 +1136,8 @@ class MdTab(QWidget):
         self.md_box_type.setVisible(not checked)
         self.md_box_size_mode.setVisible(not checked)
 
-        self.lbl_box_size.setVisible(not checked and not self.md_box_size_mode.currentText().startswith("按盒子"))
-        self.md_box_size.setVisible(not checked and not self.md_box_size_mode.currentText().startswith("按盒子"))
+        self.lbl_box_size.setVisible(not checked and (self.md_box_size_mode.currentData() != "box"))
+        self.md_box_size.setVisible(not checked and (self.md_box_size_mode.currentData() != "box"))
 
         self.lbl_box_a.setVisible(not checked and self.lbl_box_a.isVisible())
         self.md_box_a.setVisible(not checked and self.md_box_a.isVisible())
@@ -1630,3 +1640,43 @@ class MdTab(QWidget):
             self.evap_run_btn.setEnabled(not running)
         if hasattr(self, "anneal_run_btn"):
             self.anneal_run_btn.setEnabled(not running)
+
+
+    def retranslate_ui(self, lang: str):
+        self.common_group.setTitle(tr("md_global_group", lang=lang))
+        self.prep_phase.setTitle(tr("md_phase_prep", lang=lang))
+        self.em_phase.setTitle(tr("md_phase_em", lang=lang))
+        self.equil_phase.setTitle(tr("md_phase_equil", lang=lang))
+        self.prod_phase.setTitle(tr("md_phase_prod", lang=lang))
+        self.evap_phase.setTitle(tr("md_phase_evap", lang=lang))
+        self.anneal_phase.setTitle(tr("md_phase_anneal", lang=lang))
+
+        self.lbl_ff.setText(tr("md_ff", lang=lang))
+        self.lbl_water.setText(tr("md_water", lang=lang))
+        self.lbl_box_type.setText(tr("md_box_type", lang=lang))
+        self.lbl_box_mode.setText(tr("md_box_mode", lang=lang))
+        self.lbl_ion.setText(tr("md_ion_conc", lang=lang))
+        self.lbl_temp.setText(tr("md_temp", lang=lang))
+        self.lbl_press.setText(tr("md_press", lang=lang))
+        self.lbl_dt.setText(tr("md_dt", lang=lang))
+        self.lbl_nsteps.setText(tr("md_nsteps", lang=lang))
+        self.lbl_engine.setText(tr("md_engine", lang=lang))
+        self.lbl_nt.setText(tr("md_nt", lang=lang))
+        self.lbl_pdb.setText(tr("md_pdb", lang=lang))
+        self.lbl_box_size.setText(tr("md_box_dist", lang=lang))
+
+        self.md_princ.setText(tr("md_princ", lang=lang))
+        self.use_existing_top.setText(tr("md_use_existing", lang=lang))
+        self.skip_solvate.setText(tr("md_skip_solvate", lang=lang))
+        self.skip_genion.setText(tr("md_skip_genion", lang=lang))
+        self.skip_editconf.setText(tr("md_skip_editconf", lang=lang))
+
+        self.md_box_size_mode.setItemText(0, tr("md_box_opt_margin", lang=lang))
+        self.md_box_size_mode.setItemText(1, tr("md_box_opt_dims", lang=lang))
+        self.evap_mode.setItemText(0, tr("md_evap_mode_batch", lang=lang))
+        self.evap_mode.setItemText(1, tr("md_evap_mode_all", lang=lang))
+
+        self.evap_run_btn.setText(tr("md_evap_start", lang=lang))
+        self.anneal_run_btn.setText(tr("md_anneal_start", lang=lang))
+        for widgets in self.md_step_btns.values():
+            widgets["run_btn"].setText(tr("run_step", lang=lang))

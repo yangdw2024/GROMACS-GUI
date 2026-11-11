@@ -24,6 +24,7 @@ from simulation.analysis import (
     build_trajectory_tool_command,
     build_preprocessing_commands
 )
+from gui.i18n import tr
 
 class TrajectoryTab(QWidget):
     """Part 4: 轨迹处理与预处理流水线独立页面组件
@@ -91,8 +92,8 @@ class TrajectoryTab(QWidget):
         vbox.setContentsMargins(8, 10, 8, 10)
 
         # 1. 通用参数区
-        common_group = QGroupBox("轨迹处理参数")
-        cgrid = QGridLayout(common_group)
+        self.common_group = QGroupBox(tr("traj_common_group"))
+        cgrid = QGridLayout(self.common_group)
 
         self.traj_input, traj_input_layout = self._create_file_input(
             "md.xtc", "md.xtc", "轨迹文件 (*.xtc *.trr);;所有文件 (*.*)", "选择输入轨迹"
@@ -112,20 +113,18 @@ class TrajectoryTab(QWidget):
         cgrid.addWidget(QLabel("索引文件:"), 1, 0)
         cgrid.addLayout(traj_idx_layout, 1, 1)
 
-        vbox.addWidget(common_group)
+        vbox.addWidget(self.common_group)
 
         # 2. 预处理流水线
-        prep_group = QGroupBox("🔄 轨迹预处理流水线")
-        prep_group.setProperty("role", "phaseGroup")
-        prep_layout = QVBoxLayout(prep_group)
+        self.prep_group = QGroupBox(tr("traj_prep_group"))
+        self.prep_group.setProperty("role", "phaseGroup")
+        prep_layout = QVBoxLayout(self.prep_group)
         prep_layout.setSpacing(8)
 
-        prep_desc = QLabel(
-            "标准预处理五步法：PBC修复 → 体系居中 → 去除平动/转动 → 截取平衡段 → 降采样精简"
-        )
-        prep_desc.setWordWrap(True)
-        prep_desc.setProperty("role", "desc")
-        prep_layout.addWidget(prep_desc)
+        self.prep_desc = QLabel(tr("traj_prep_desc"))
+        self.prep_desc.setWordWrap(True)
+        self.prep_desc.setProperty("role", "desc")
+        prep_layout.addWidget(self.prep_desc)
 
         prep_grid = QGridLayout()
         prep_grid.setSpacing(6)
@@ -186,12 +185,12 @@ class TrajectoryTab(QWidget):
         prep_layout.addLayout(prep_grid)
 
         # 运行按钮
-        self.prep_run_btn = QPushButton("一键执行预处理流水线")
-        self.prep_run_btn.setProperty("role", "browseBtn")
+        self.prep_run_btn = QPushButton(tr("traj_prep_btn"))
+        self.prep_run_btn.setProperty("role", "primaryRun")
         self.prep_run_btn.clicked.connect(self.run_preprocessing_pipeline)
         prep_layout.addWidget(self.prep_run_btn)
 
-        vbox.addWidget(prep_group)
+        vbox.addWidget(self.prep_group)
 
         # 3. 各独立轨迹工具
         tools = [
@@ -390,3 +389,11 @@ class TrajectoryTab(QWidget):
                         self.traj_widgets[k]["out"].setText(str(tool_data["out"]))
                     if "opt" in tool_data:
                         self.traj_widgets[k]["opt"].setText(str(tool_data["opt"]))
+
+    def retranslate_ui(self, lang: str):
+        self.common_group.setTitle(tr("traj_common_group", lang=lang))
+        self.prep_group.setTitle(tr("traj_prep_group", lang=lang))
+        self.prep_desc.setText(tr("traj_prep_desc", lang=lang))
+        self.prep_run_btn.setText(tr("traj_prep_btn", lang=lang))
+        for w in self.traj_widgets.values():
+            w["run_btn"].setText(tr("run_tool", lang=lang))

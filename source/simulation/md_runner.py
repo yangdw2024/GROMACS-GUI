@@ -88,7 +88,8 @@ def build_editconf_command(
         bt = "triclinic"
     is_rect = "rectangular" in bt_full.lower()
     is_triclinic = "triclinic" in bt_full.lower()
-    is_box_mode = "边长" in box_widgets["size_mode"]
+    size_mode_val = str(box_widgets.get("size_mode", ""))
+    is_box_mode = ("边长" in size_mode_val) or ("-box" in size_mode_val.lower()) or (size_mode_val == "box")
 
     params = []
     if box_widgets.get("center"):

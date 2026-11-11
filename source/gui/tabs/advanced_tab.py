@@ -24,6 +24,7 @@ from simulation.mdp_builder import (
     build_plumed_metad,
     build_plumed_abf
 )
+from gui.i18n import tr
 
 
 class AdvancedTab(QWidget):
@@ -65,18 +66,15 @@ class AdvancedTab(QWidget):
         vbox.setSpacing(12)
         vbox.setContentsMargins(8, 10, 8, 10)
 
-        info = QLabel(
-            "高级模拟方法需要特定的 MDP 参数和可能需要 PLUMED 插件支持。\n"
-            "本版本 GROMACS 已内置 PLUMED 支持。"
-        )
-        info.setWordWrap(True)
-        info.setProperty("role", "desc")
-        vbox.addWidget(info)
+        self.info_label = QLabel(tr("adv_info"))
+        self.info_label.setWordWrap(True)
+        self.info_label.setProperty("role", "desc")
+        vbox.addWidget(self.info_label)
 
         # 1. 伞形采样
-        umbrella_group = QGroupBox("伞形采样 (Umbrella Sampling)")
-        umbrella_group.setProperty("role", "phaseGroup")
-        ugrid = QGridLayout(umbrella_group)
+        self.umbrella_group = QGroupBox(tr("adv_umb_group"))
+        self.umbrella_group.setProperty("role", "phaseGroup")
+        ugrid = QGridLayout(self.umbrella_group)
 
         self.umb_tpr = QLineEdit("md.tpr")
         self.umb_xtc = QLineEdit("md.xtc")
@@ -123,17 +121,17 @@ class AdvancedTab(QWidget):
         ugrid.addWidget(QLabel("窗口数:"), 4, 0)
         ugrid.addWidget(self.umb_pull_nwindows, 4, 1)
 
-        self.umb_run_btn = QPushButton("生成伞形采样 MDP")
+        self.umb_run_btn = QPushButton(tr("adv_umb_btn"))
         self.umb_run_btn.setProperty("role", "accentBtn")
         self.umb_run_btn.clicked.connect(self.generate_umbrella_mdp)
         ugrid.addWidget(self.umb_run_btn, 5, 0, 1, 4)
 
-        vbox.addWidget(umbrella_group)
+        vbox.addWidget(self.umbrella_group)
 
         # 2. WHAM 分析
-        wham_group = QGroupBox("WHAM 自由能计算")
-        wham_group.setProperty("role", "phaseGroup")
-        wgrid = QGridLayout(wham_group)
+        self.wham_group = QGroupBox(tr("adv_wham_group"))
+        self.wham_group.setProperty("role", "phaseGroup")
+        wgrid = QGridLayout(self.wham_group)
 
         self.wham_files = QLineEdit("pull*.xvg")
         self.wham_temp = QDoubleSpinBox()
@@ -150,17 +148,17 @@ class AdvancedTab(QWidget):
         wgrid.addWidget(QLabel("输出文件:"), 1, 0)
         wgrid.addWidget(self.wham_out, 1, 1)
 
-        self.wham_run_btn = QPushButton("▶ 运行 gmx wham")
+        self.wham_run_btn = QPushButton(tr("adv_wham_btn"))
         self.wham_run_btn.setProperty("role", "actionBtn")
         self.wham_run_btn.clicked.connect(self.run_wham)
         wgrid.addWidget(self.wham_run_btn, 2, 0, 1, 4)
 
-        vbox.addWidget(wham_group)
+        vbox.addWidget(self.wham_group)
 
         # 3. 元动力学
-        meta_group = QGroupBox("元动力学 (Metadynamics) - PLUMED")
-        meta_group.setProperty("role", "phaseGroup")
-        mgrid = QGridLayout(meta_group)
+        self.meta_group = QGroupBox(tr("adv_meta_group"))
+        self.meta_group.setProperty("role", "phaseGroup")
+        mgrid = QGridLayout(self.meta_group)
 
         self.meta_tpr = QLineEdit("md.tpr")
         self.meta_plumed = QLineEdit("plumed.dat")
@@ -188,22 +186,22 @@ class AdvancedTab(QWidget):
         mgrid.addWidget(QLabel("高斯宽度:"), 2, 0)
         mgrid.addWidget(self.meta_sigma, 2, 1)
 
-        self.meta_gen_btn = QPushButton("生成 PLUMED 输入")
+        self.meta_gen_btn = QPushButton(tr("adv_meta_gen_btn"))
         self.meta_gen_btn.setProperty("role", "accentBtn")
         self.meta_gen_btn.clicked.connect(self.generate_plumed_meta)
         mgrid.addWidget(self.meta_gen_btn, 3, 0, 1, 2)
 
-        self.meta_run_btn = QPushButton("▶ 运行元动力学模拟")
+        self.meta_run_btn = QPushButton(tr("adv_meta_run_btn"))
         self.meta_run_btn.setProperty("role", "primaryRun")
         self.meta_run_btn.clicked.connect(self.run_metadynamics)
         mgrid.addWidget(self.meta_run_btn, 3, 2, 1, 2)
 
-        vbox.addWidget(meta_group)
+        vbox.addWidget(self.meta_group)
 
         # 4. ABF 方法
-        abf_group = QGroupBox("自适应偏置力 (ABF)")
-        abf_group.setProperty("role", "phaseGroup")
-        agrid = QGridLayout(abf_group)
+        self.abf_group = QGroupBox(tr("adv_abf_group"))
+        self.abf_group.setProperty("role", "phaseGroup")
+        agrid = QGridLayout(self.abf_group)
 
         self.abf_tpr = QLineEdit("md.tpr")
         self.abf_plumed = QLineEdit("plumed_abf.dat")
@@ -228,12 +226,12 @@ class AdvancedTab(QWidget):
         agrid.addWidget(QLabel("分箱数:"), 2, 0)
         agrid.addWidget(self.abf_nbins, 2, 1)
 
-        self.abf_gen_btn = QPushButton("生成 ABF PLUMED")
+        self.abf_gen_btn = QPushButton(tr("adv_abf_btn"))
         self.abf_gen_btn.setProperty("role", "accentBtn")
         self.abf_gen_btn.clicked.connect(self.generate_plumed_abf)
         agrid.addWidget(self.abf_gen_btn, 3, 0, 1, 4)
 
-        vbox.addWidget(abf_group)
+        vbox.addWidget(self.abf_group)
         vbox.addStretch()
 
     def generate_umbrella_mdp(self):
@@ -403,3 +401,15 @@ class AdvancedTab(QWidget):
             self.abf_max.setValue(float(data["abf_max"]))
         if "abf_nbins" in data:
             self.abf_nbins.setValue(int(data["abf_nbins"]))
+
+    def retranslate_ui(self, lang: str):
+        self.info_label.setText(tr("adv_info", lang=lang))
+        self.umbrella_group.setTitle(tr("adv_umb_group", lang=lang))
+        self.wham_group.setTitle(tr("adv_wham_group", lang=lang))
+        self.meta_group.setTitle(tr("adv_meta_group", lang=lang))
+        self.abf_group.setTitle(tr("adv_abf_group", lang=lang))
+        self.umb_run_btn.setText(tr("adv_umb_btn", lang=lang))
+        self.wham_run_btn.setText(tr("adv_wham_btn", lang=lang))
+        self.meta_gen_btn.setText(tr("adv_meta_gen_btn", lang=lang))
+        self.meta_run_btn.setText(tr("adv_meta_run_btn", lang=lang))
+        self.abf_gen_btn.setText(tr("adv_abf_btn", lang=lang))
