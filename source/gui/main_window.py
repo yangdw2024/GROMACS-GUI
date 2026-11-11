@@ -1340,6 +1340,10 @@ class GromacsGUI(QMainWindow):
         self.mmpbsa_fmt = tab.mmpbsa_fmt
         self.mmpbsa_width = tab.mmpbsa_width
         self.mmpbsa_height = tab.mmpbsa_height
+        self.mmpbsa_rec_group = tab.mmpbsa_rec_group
+        self.mmpbsa_lig_group = tab.mmpbsa_lig_group
+        self.mmpbsa_traj_dt = tab.mmpbsa_traj_dt
+        self.mmpbsa_scan_ndx_btn = tab.mmpbsa_scan_ndx_btn
         self.mmpbsa_run_btn = tab.mmpbsa_run_btn
         return tab
 
@@ -3046,6 +3050,7 @@ class GromacsGUI(QMainWindow):
                 },
                 "part1_steps": {},
                 "script_type": self.script_type.currentData() or self.script_type.currentText() if hasattr(self, 'script_type') else "PowerShell (.ps1)",
+                "mmpbsa": self.mmpbsa_tab.get_config() if hasattr(self, "mmpbsa_tab") else {},
                 "language": i18n_get_language()
             }
 
@@ -3210,6 +3215,9 @@ class GromacsGUI(QMainWindow):
                     idx = self.script_type.findText(val)
                 if idx >= 0:
                     self.script_type.setCurrentIndex(idx)
+
+            if hasattr(self, "mmpbsa_tab") and "mmpbsa" in config:
+                self.mmpbsa_tab.set_config(config["mmpbsa"])
 
             if "language" in config:
                 self.set_language(config["language"])
