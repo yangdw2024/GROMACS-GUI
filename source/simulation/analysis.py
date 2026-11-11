@@ -6,7 +6,11 @@ GROMACS 命令构建器：分析、轨迹处理、结构处理工具
 所有函数均为纯函数，输入参数（不含 Qt 引用），返回命令列表与步骤名。
 零逻辑改动搬运自原 GromacsGUI 的 run_analysis / run_trajectory_tool / run_structure_tool。
 """
+import importlib.util
 import os
+import re
+import shutil
+import sys
 from typing import List, Optional, Tuple
 
 
@@ -534,13 +538,108 @@ def build_preprocessing_commands(gmx: str, params: dict) -> list:
 
 
 # =============================================================================
-# Part 6: MMPBSA 命令构建
+# Part 6: MMPBSA 命令构建与环境校验 (治理 Issue #5)
 # =============================================================================
 
-def build_mmpbsa_command(files: dict) -> Tuple[List[str], str]:
+def parse_ndx_groups(ndx_path: str) -> List[Tuple[int, str]]:
+    """读取 GROMACS .ndx 索引文件，返回按 0-based 编号排列的 [(组号, 组名), ...]"""
+    groups: List[Tuple[int, str]] = []
+    if not ndx_path or not os.path.isfile(ndx_path):
+        return groups
+    with open(ndx_path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            s = line.strip()
+            m = re.match(r"^\[\s*(.+?)\s*\]$", s)
+            if m:
+                groups.append((len(groups), m.group(1)))
+    return groups
+
+
+def convert_ps_to_mmpbsa_frames(
+    start_ps: float,
+    end_ps: float,
+    interval_ps: float,
+    traj_dt_ps: float = 10.0,
+) -> Tuple[int, Optional[int], int]:
+    """将 GUI 的物理时间 (ps) 严谨换算为 gmx_MMPBSA 1-based 轨迹帧号 (startframe, endframe, interval)
+
+    物理原则：
+    - GUI 输入的 ps 时间绝不能直接当作帧索引；必须依据真实轨迹输出间隔 traj_dt_ps 换算。
+    - startframe >= 1 (gmx_MMPBSA 1-based 索引: frame = 1 + round(start_ps / traj_dt_ps))
+    - end_ps <= 0 表示计算至轨迹最后一帧，返回 endframe = None
+    """
+    if traj_dt_ps <= 0:
+        raise ValueError(f"轨迹帧间隔 traj_dt_ps 必须为正数: {traj_dt_ps}")
+    if start_ps < 0 or end_ps < 0:
+        raise ValueError("起止时间不可为负数")
+    if end_ps > 0 and end_ps < start_ps:
+        raise ValueError(f"结束时间 ({end_ps} ps) 小于开始时间 ({start_ps} ps)")
+
+    start_frame = 1 + max(0, int(round(start_ps / traj_dt_ps)))
+    end_frame = None if end_ps <= 0 else max(start_frame, 1 + int(round(end_ps / traj_dt_ps)))
+    frame_interval = max(1, int(round(interval_ps / traj_dt_ps))) if interval_ps > 0 else 1
+    return start_frame, end_frame, frame_interval
+
+
+def build_mmpbsa_input_file(params: dict) -> str:
+    """根据采样起止帧、间隔、温度及绘图尺寸偏好生成标准的 gmx_MMPBSA 输入文件 (mmpbsa.in)"""
+    start_frame = int(params.get("startframe", 1))
+    end_frame = params.get("endframe")
+    interval = max(1, int(params.get("interval", 1)))
+    temperature = float(params.get("temperature", 298.15))
+    sys_name = str(params.get("sys_name", "GROMACS_GUI_MMPBSA")).replace('"', "")
+
+    general_lines = [
+        "&general",
+        f'  sys_name="{sys_name}",',
+        f"  startframe={start_frame},",
+    ]
+    if end_frame is not None and int(end_frame) > 0:
+        general_lines.append(f"  endframe={int(end_frame)},")
+    general_lines.extend([
+        f"  interval={interval},",
+        f"  temperature={temperature:.2f},",
+        "  verbose=2,",
+        "/",
+        "&gb",
+        "  igb=5, saltcon=0.150,",
+        "/",
+        "",
+    ])
+    return "\n".join(general_lines)
+
+
+def detect_gmx_mmpbsa_runner() -> Tuple[Optional[List[str]], str]:
+    """探测外部 gmx_MMPBSA 可执行环境。
+
+    优先查找独立的 gmx_MMPBSA 可执行程序；若未找到，则检测当前 Python 环境中是否安装了 GMXMMPBSA 包。
+    返回 (runner_cmd_prefix, diagnostic_message)。
+    """
+    exe = shutil.which("gmx_MMPBSA")
+    if exe:
+        return [exe], f"检测到 gmx_MMPBSA 可执行程序: {exe}"
+
+    if importlib.util.find_spec("GMXMMPBSA") is not None:
+        return [sys.executable, "-m", "GMXMMPBSA.app"], f"检测到 Python GMXMMPBSA 模块 ({sys.executable})"
+
+    return None, (
+        "未检测到 gmx_MMPBSA 环境（既无 PATH 中的 gmx_MMPBSA 命令，也未在当前 Python 安装 GMXMMPBSA）。\n"
+        "安装提示: conda install -c conda-forge gmx_mmpbsa 或 pip install gmx-MMPBSA"
+    )
+
+
+def build_mmpbsa_command(files: dict, options: Optional[dict] = None) -> Tuple[List[str], str]:
     """构建 gmx_MMPBSA 命令
 
     files: {tpr, xtc, ndx, top}
+    options (可选):
+      - input_file: mmpbsa.in 路径
+      - receptor_group: 受体索引组号或名称 (如 "1" 或 "0")
+      - ligand_group: 配体索引组号或名称 (如 "13" 或 "2")
+      - nt: 并行进程数 (结合 mpiexec/mpirun 使用)
+      - runner_prefix: 外部探测到的 gmx_MMPBSA 命令前缀
+      - use_mpi: 是否启用 MPI 并行 (默认当 nt > 1 且检测到 mpirun 时自动启用)
+      - output_dat: 输出结果文件名 (默认 FINAL_RESULTS_MMPBSA.dat)
     返回 (cmd, step_name)
     """
     tpr = files["tpr"]
@@ -549,14 +648,46 @@ def build_mmpbsa_command(files: dict) -> Tuple[List[str], str]:
     top = files["top"]
 
     step_name = "MMPBSA 结合自由能计算"
-    cmd = [
-        "python", "-m", "GMXMMPBSA.app",
+
+    if options is None:
+        # 向后兼容无 options 的旧调用签名
+        cmd = [
+            "python", "-m", "GMXMMPBSA.app",
+            "-cs", tpr,
+            "-ci", ndx,
+            "-cg", "1", "13",
+            "-ct", xtc,
+            "-cp", top,
+            "-o", "FINAL_RESULTS_MMPBSA.dat",
+            "-nogui"
+        ]
+        return cmd, step_name
+
+    runner_prefix = list(options.get("runner_prefix") or ["python", "-m", "GMXMMPBSA.app"])
+    rec_grp = str(options.get("receptor_group", "")).strip()
+    lig_grp = str(options.get("ligand_group", "")).strip()
+    if not rec_grp or not lig_grp:
+        raise ValueError("必须明确指定受体索引组 (receptor_group) 和配体索引组 (ligand_group)，不允许盲目假定组 1/13")
+
+    nt = max(1, int(options.get("nt", 1)))
+    mpi_exe = options.get("mpi_exe") or shutil.which("mpirun") or shutil.which("mpiexec")
+    use_mpi = options.get("use_mpi", True) and nt > 1 and bool(mpi_exe)
+
+    prefix_cmd: List[str] = []
+    if use_mpi and mpi_exe:
+        prefix_cmd = [mpi_exe, "-np", str(nt)]
+        if "-O" not in runner_prefix and "gmx_MMPBSA" in runner_prefix[0]:
+            pass
+
+    cmd = prefix_cmd + runner_prefix + [
+        "-O",
+        "-i", str(options.get("input_file", "mmpbsa.in")),
         "-cs", tpr,
         "-ci", ndx,
-        "-cg", "1", "13",
+        "-cg", rec_grp, lig_grp,
         "-ct", xtc,
         "-cp", top,
-        "-o", "FINAL_RESULTS_MMPBSA.dat",
+        "-o", str(options.get("output_dat", "FINAL_RESULTS_MMPBSA.dat")),
         "-nogui"
     ]
     return cmd, step_name
