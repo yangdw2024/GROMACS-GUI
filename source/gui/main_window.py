@@ -66,6 +66,7 @@ from gui.workers.gromacs_worker import GromacsWorker
 from gui.themes import (
     DARK_TOKENS, LIGHT_TOKENS, get_theme_tokens, build_palette, build_shell_stylesheet
 )
+from gui.i18n import tr, set_language as i18n_set_language, get_language as i18n_get_language
 
 
 # =============================================================================
@@ -752,6 +753,11 @@ class GromacsGUI(QMainWindow):
         self.layout_mode_btn.setToolTip("在现代化左导航工作台与经典双栏视图之间切换")
         self.layout_mode_btn.clicked.connect(self.toggle_layout_mode)
 
+        self.lang_btn = QPushButton(tr("lang_switch_btn"))
+        self.lang_btn.setProperty("role", "secondaryTool")
+        self.lang_btn.setToolTip(tr("lang_tooltip"))
+        self.lang_btn.clicked.connect(self.toggle_language)
+
         bar1.addWidget(self.run_all_btn)
         bar1.addWidget(self.stop_btn)
         bar1.addWidget(self.mdp_editor_btn)
@@ -761,6 +767,7 @@ class GromacsGUI(QMainWindow):
         bar1.addWidget(self.more_tools_btn)
         bar1.addWidget(self.theme_btn)
         bar1.addWidget(self.layout_mode_btn)
+        bar1.addWidget(self.lang_btn)
 
         parent_layout.addWidget(header_frame)
 
@@ -917,29 +924,32 @@ class GromacsGUI(QMainWindow):
         vbox.setSpacing(4)
 
         nav_groups = [
-            ("动力学与建模", [
-                (0, "Part 1 · MD 模拟", "全流程分子动力学、SA溶剂蒸发及退火模拟"),
-                (1, "Part 2 · 结构处理", "生成拓扑、盒子编辑、索引制作与结构校验"),
-                (2, "Part 3 · 高级模拟", "伞形采样、WHAM、元动力学与 ABF 增强采样"),
+            ("nav_group_md", [
+                (0, "nav_part1", "全流程分子动力学、SA溶剂蒸发及退火模拟"),
+                (1, "nav_part2", "生成拓扑、盒子编辑、索引制作与结构校验"),
+                (2, "nav_part3", "伞形采样、WHAM、元动力学与 ABF 增强采样"),
             ]),
-            ("轨迹与后处理分析", [
-                (3, "Part 4 · 轨迹处理", "PBC修复、居中拟合流水线及常规轨迹工具"),
-                (4, "Part 5 · 结果分析", "热力学、结构稳定性、片段RDF及科研出图"),
-                (5, "Part 6 · MMPBSA", "基于 gmx_MMPBSA 的结合自由能计算"),
+            ("nav_group_ana", [
+                (3, "nav_part4", "PBC修复、居中拟合流水线及常规轨迹工具"),
+                (4, "nav_part5", "热力学、结构稳定性、片段RDF及科研出图"),
+                (5, "nav_part6", "基于 gmx_MMPBSA 的结合自由能计算"),
             ]),
-            ("自动化与脚本", [
-                (6, "Part 7 · 自定义脚本", "PowerShell / Batch / Shell 自定义批处理脚本"),
+            ("nav_group_script", [
+                (6, "nav_part7", "PowerShell / Batch / Shell 自定义批处理脚本"),
             ]),
         ]
 
         self.nav_buttons = []
-        for group_title, items in nav_groups:
-            sec_lbl = QLabel(group_title)
+        self.nav_section_labels = []
+        for group_key, items in nav_groups:
+            sec_lbl = QLabel(tr(group_key))
             sec_lbl.setProperty("role", "navSectionHeader")
             vbox.addWidget(sec_lbl)
-            for tab_idx, text, tip in items:
-                btn = QPushButton(text)
+            self.nav_section_labels.append((group_key, sec_lbl))
+            for tab_idx, text_key, tip in items:
+                btn = QPushButton(tr(text_key))
                 btn.setProperty("role", "navItem")
+                btn.setProperty("i18n_key", text_key)
                 btn.setProperty("active", "true" if tab_idx == 0 else "false")
                 btn.setToolTip(tip)
                 btn.setCursor(Qt.PointingHandCursor)
@@ -951,9 +961,9 @@ class GromacsGUI(QMainWindow):
         vbox.addStretch(1)
 
         # 底部系统维护快捷入口（收纳原顶栏低频按钮）
-        sys_sec = QLabel("系统与维护")
-        sys_sec.setProperty("role", "navSectionHeader")
-        vbox.addWidget(sys_sec)
+        self.sys_sec_lbl = QLabel(tr("nav_group_sys"))
+        self.sys_sec_lbl.setProperty("role", "navSectionHeader")
+        vbox.addWidget(self.sys_sec_lbl)
 
         self.cleanup_btn = QPushButton("系统清理")
         self.cleanup_btn.setProperty("role", "secondaryTool")
@@ -1349,9 +1359,9 @@ class GromacsGUI(QMainWindow):
         header_layout.setContentsMargins(12, 4, 12, 4)
         header_layout.setSpacing(8)
 
-        title_lbl = QLabel("▶ 运行终端")
-        title_lbl.setStyleSheet("font-weight: bold;")
-        header_layout.addWidget(title_lbl)
+        self.console_title_lbl = QLabel(tr("terminal_title"))
+        self.console_title_lbl.setStyleSheet("font-weight: bold;")
+        header_layout.addWidget(self.console_title_lbl)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -1402,7 +1412,9 @@ class GromacsGUI(QMainWindow):
         self.console_expanded = not getattr(self, "console_expanded", True)
         self.log_text.setVisible(self.console_expanded)
         if hasattr(self, "toggle_console_btn"):
-            self.toggle_console_btn.setText("▲ 展开" if not self.console_expanded else "▼ 折叠")
+            self.toggle_console_btn.setText(
+                tr("expand_btn") if not self.console_expanded else tr("collapse_btn")
+            )
         if hasattr(self, "center_right_splitter") and getattr(self, "ui_layout_mode", "modern") == "modern":
             total_h = max(400, self.center_right_splitter.height())
             if self.console_expanded:
@@ -1418,6 +1430,89 @@ class GromacsGUI(QMainWindow):
         self._color_cmd = QColor("#CE93D8")
         self._color_default = QColor("#E0E0E0")
 
+    def toggle_language(self):
+        new_lang = "en" if i18n_get_language() == "zh" else "zh"
+        self.set_language(new_lang)
+
+    def set_language(self, lang: str):
+        active_lang = i18n_set_language(lang)
+        self.current_lang = active_lang
+        self.retranslate_ui(active_lang)
+
+    def retranslate_ui(self, lang: str):
+        # 1. 顶部操作栏
+        self.brand_sub_label.setText(tr("brand_subtitle", lang=lang))
+        self.run_all_btn.setText(tr("run_all", lang=lang))
+        self.stop_btn.setText(tr("stop", lang=lang))
+        self.mdp_editor_btn.setText(tr("mdp_editor", lang=lang))
+        self.monitor_btn.setText(tr("monitor", lang=lang))
+        self.save_config_btn.setText(tr("save", lang=lang))
+        self.load_config_btn.setText(tr("load", lang=lang))
+        self.more_tools_btn.setText(tr("more", lang=lang))
+        if getattr(self, "current_theme", "dark") == "dark":
+            self.theme_btn.setText(tr("theme_to_light", lang=lang))
+        else:
+            self.theme_btn.setText(tr("theme_to_dark", lang=lang))
+        if getattr(self, "ui_layout_mode", "modern") == "modern":
+            self.layout_mode_btn.setText(tr("layout_to_classic", lang=lang))
+        else:
+            self.layout_mode_btn.setText(tr("layout_to_modern", lang=lang))
+        self.lang_btn.setText(tr("lang_switch_btn", lang=lang))
+        self.lang_btn.setToolTip(tr("lang_tooltip", lang=lang))
+
+        self.lbl_workdir_title.setText(tr("workdir_label", lang=lang))
+        self.path_edit.setPlaceholderText(tr("workdir_placeholder", lang=lang))
+        self.browse_btn.setText(tr("browse", lang=lang))
+
+        # 2. 硬件配置抽屉
+        self.gmx_browse_btn.setText(tr("browse", lang=lang))
+        self.show_all_versions_cb.setText(tr("show_all_versions", lang=lang))
+        self.version_mgmt_btn.setText(tr("version_mgmt", lang=lang))
+        self.open_update_pkg_btn.setText(tr("update_pkg", lang=lang))
+        self.cfg_mem_limit.setText(tr("mem_limit", lang=lang))
+        self.cfg_gpu.setText(tr("enable_gpu", lang=lang))
+        self.cfg_gpu_auto.setText(tr("auto_mode", lang=lang))
+        self.gpu_diagnose_btn.setText(tr("gpu_diag", lang=lang))
+
+        # 3. 左侧导航与系统工具
+        for group_key, sec_lbl in getattr(self, "nav_section_labels", []):
+            sec_lbl.setText(tr(group_key, lang=lang))
+        for tab_idx, btn in getattr(self, "nav_buttons", []):
+            key = btn.property("i18n_key")
+            if key:
+                btn.setText(tr(key, lang=lang))
+            if hasattr(self, "tab_widget") and 0 <= tab_idx < self.tab_widget.count():
+                self.tab_widget.setTabText(tab_idx, tr(key, lang=lang).replace(" · ", ": "))
+
+        if hasattr(self, "sys_sec_lbl"):
+            self.sys_sec_lbl.setText(tr("nav_group_sys", lang=lang))
+        self.cleanup_btn.setText(tr("sys_cleanup", lang=lang))
+        self.log_btn.setText(tr("log_dir", lang=lang))
+        self.version_btn.setText(tr("about_ver", lang=lang))
+
+        # 4. 底部控制台与状态栏
+        if hasattr(self, "console_title_lbl"):
+            self.console_title_lbl.setText(tr("terminal_title", lang=lang))
+        self.diagnosis_btn.setText(tr("diag_btn", lang=lang))
+        self.clear_log_btn.setText(tr("clear_btn", lang=lang))
+        self.export_log_btn.setText(tr("export_btn", lang=lang))
+        if hasattr(self, "toggle_console_btn"):
+            self.toggle_console_btn.setText(
+                tr("collapse_btn", lang=lang) if getattr(self, "console_expanded", True) else tr("expand_btn", lang=lang)
+            )
+        if getattr(self, "ui_layout_mode", "modern") == "modern":
+            self.statusBar().showMessage(tr("status_ready_modern", lang=lang))
+        else:
+            self.statusBar().showMessage(tr("status_ready_classic", lang=lang))
+
+        # 5. 全部七大页面组件级联翻译
+        for tab_attr in ["md_tab", "struc_tab", "advanced_tab", "traj_tab", "analysis_tab", "mmpbsa_tab", "script_tab"]:
+            tab_obj = getattr(self, tab_attr, None)
+            if tab_obj and hasattr(tab_obj, "retranslate_ui"):
+                tab_obj.retranslate_ui(lang)
+
+        self._adapt_responsive_topbar(self.width())
+
     def toggle_theme(self):
         if self.current_theme == "dark":
             self._apply_light_theme()
@@ -1426,7 +1521,7 @@ class GromacsGUI(QMainWindow):
 
     def _apply_dark_theme(self):
         self.current_theme = "dark"
-        self.theme_btn.setText("☀️ 浅色")
+        self.theme_btn.setText(tr("theme_to_light"))
         tokens = get_theme_tokens("dark")
         app = QApplication.instance()
         app.setPalette(build_palette(tokens))
@@ -1435,7 +1530,7 @@ class GromacsGUI(QMainWindow):
 
     def _apply_light_theme(self):
         self.current_theme = "light"
-        self.theme_btn.setText("🌙 深色")
+        self.theme_btn.setText(tr("theme_to_dark"))
         tokens = get_theme_tokens("light")
         app = QApplication.instance()
         app.setPalette(build_palette(tokens))
@@ -2925,7 +3020,8 @@ class GromacsGUI(QMainWindow):
                     "skip_genion": self.skip_genion.isChecked(),
                 },
                 "part1_steps": {},
-                "script_type": self.script_type.currentText() if hasattr(self, 'script_type') else "PowerShell (.ps1)"
+                "script_type": self.script_type.currentData() or self.script_type.currentText() if hasattr(self, 'script_type') else "PowerShell (.ps1)",
+                "language": i18n_get_language()
             }
 
             for step_key, step_info in self.md_step_btns.items():
@@ -3083,7 +3179,15 @@ class GromacsGUI(QMainWindow):
                         step_info["restart_check"].setChecked(step_data["restart_check"])
 
             if hasattr(self, 'script_type') and "script_type" in config:
-                self.script_type.setCurrentText(config["script_type"])
+                val = str(config["script_type"])
+                idx = self.script_type.findData(val)
+                if idx < 0:
+                    idx = self.script_type.findText(val)
+                if idx >= 0:
+                    self.script_type.setCurrentIndex(idx)
+
+            if "language" in config:
+                self.set_language(config["language"])
 
             self.add_log(f"配置已从 {filepath} 加载", "success")
         except Exception as e:

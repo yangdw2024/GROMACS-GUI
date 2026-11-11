@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from simulation.analysis import build_mmpbsa_command
+from gui.i18n import tr
 
 
 class MmpbsaTab(QWidget):
@@ -52,17 +53,14 @@ class MmpbsaTab(QWidget):
         vbox.setSpacing(14)
         vbox.setContentsMargins(8, 10, 8, 10)
 
-        info = QLabel(
-            "MMPBSA (Molecular Mechanics Poisson-Boltzmann Surface Area) "
-            "结合自由能计算。\n请确保已安装 gmx_MMPBSA 或相关脚本。"
-        )
-        info.setWordWrap(True)
-        info.setProperty("role", "desc")
-        vbox.addWidget(info)
+        self.info_label = QLabel(tr("mmpbsa_info"))
+        self.info_label.setWordWrap(True)
+        self.info_label.setProperty("role", "desc")
+        vbox.addWidget(self.info_label)
 
         # 1. 输入文件参数
-        inp_group = QGroupBox("输入文件参数")
-        igrid = QGridLayout(inp_group)
+        self.inp_group = QGroupBox(tr("mmpbsa_inp_group"))
+        igrid = QGridLayout(self.inp_group)
 
         self.mmpbsa_tpr = QLineEdit("md.tpr")
         self.mmpbsa_xtc = QLineEdit("md.xtc")
@@ -79,11 +77,11 @@ class MmpbsaTab(QWidget):
         igrid.addWidget(QLabel("拓扑文件:"), 1, 2)
         igrid.addWidget(self.mmpbsa_top, 1, 3)
 
-        vbox.addWidget(inp_group)
+        vbox.addWidget(self.inp_group)
 
         # 2. 采样与计算参数
-        sam_group = QGroupBox("采样与计算参数")
-        sgrid = QGridLayout(sam_group)
+        self.sam_group = QGroupBox(tr("mmpbsa_sam_group"))
+        sgrid = QGridLayout(self.sam_group)
 
         self.mmpbsa_start = QDoubleSpinBox()
         self.mmpbsa_start.setRange(0, 1000000)
@@ -117,11 +115,11 @@ class MmpbsaTab(QWidget):
         sgrid.addWidget(QLabel("并行线程数:"), 1, 2)
         sgrid.addWidget(self.mmpbsa_nt, 1, 3)
 
-        vbox.addWidget(sam_group)
+        vbox.addWidget(self.sam_group)
 
         # 3. 结果图片输出设置
-        img_group = QGroupBox("结果图片输出设置")
-        imgrid = QGridLayout(img_group)
+        self.img_group = QGroupBox(tr("mmpbsa_img_group"))
+        imgrid = QGridLayout(self.img_group)
 
         self.mmpbsa_fmt = QComboBox()
         self.mmpbsa_fmt.addItems(["png", "pdf", "svg", "jpg", "tiff"])
@@ -146,11 +144,11 @@ class MmpbsaTab(QWidget):
         imgrid.addWidget(QLabel("图片高度:"), 1, 0)
         imgrid.addWidget(self.mmpbsa_height, 1, 1)
 
-        vbox.addWidget(img_group)
+        vbox.addWidget(self.img_group)
 
         # 4. 运行按钮
         run_layout = QHBoxLayout()
-        self.mmpbsa_run_btn = QPushButton("▶ 运行 MMPBSA 计算")
+        self.mmpbsa_run_btn = QPushButton(tr("mmpbsa_run_btn"))
         self.mmpbsa_run_btn.setProperty("role", "primaryRun")
         self.mmpbsa_run_btn.setMinimumHeight(34)
         self.mmpbsa_run_btn.clicked.connect(self.run_mmpbsa)
@@ -227,3 +225,10 @@ class MmpbsaTab(QWidget):
             self.mmpbsa_width.setValue(float(data["width"]))
         if "height" in data:
             self.mmpbsa_height.setValue(float(data["height"]))
+
+    def retranslate_ui(self, lang: str):
+        self.info_label.setText(tr("mmpbsa_info", lang=lang))
+        self.inp_group.setTitle(tr("mmpbsa_inp_group", lang=lang))
+        self.sam_group.setTitle(tr("mmpbsa_sam_group", lang=lang))
+        self.img_group.setTitle(tr("mmpbsa_img_group", lang=lang))
+        self.mmpbsa_run_btn.setText(tr("mmpbsa_run_btn", lang=lang))

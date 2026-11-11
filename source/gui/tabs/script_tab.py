@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
 
 from gui.script_templates import get_script_template
 from gui.dialogs.custom_template import CustomTemplateDialog
+from gui.i18n import tr
 
 
 class ScriptTab(QWidget):
@@ -54,34 +55,33 @@ class ScriptTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        info = QLabel(
-            "自定义脚本运行模块。可以编写 Windows PowerShell / Batch 脚本，"
-            "调用 GROMACS 命令或执行其他自定义流程。\n"
-            "提示: 脚本会在工作目录下执行，可使用 $env:GMX 或 %GMX% 获取gmx路径。"
-        )
-        info.setWordWrap(True)
-        info.setProperty("role", "desc")
-        layout.addWidget(info)
+        self.info_label = QLabel(tr("script_info"))
+        self.info_label.setWordWrap(True)
+        self.info_label.setProperty("role", "desc")
+        layout.addWidget(self.info_label)
 
         # 1. 顶部工具栏
         toolbar = QHBoxLayout()
 
         self.script_type = QComboBox()
-        self.script_type.addItems(["PowerShell (.ps1)", "Batch (.bat)", "Shell 命令"])
+        self.script_type.addItem("PowerShell (.ps1)", "PowerShell (.ps1)")
+        self.script_type.addItem("Batch (.bat)", "Batch (.bat)")
+        self.script_type.addItem("Shell 命令", "Shell 命令")
         self.script_type.setCurrentIndex(2)
-        toolbar.addWidget(QLabel("脚本类型:"))
+        self.script_type_lbl = QLabel(tr("script_type_lbl"))
+        toolbar.addWidget(self.script_type_lbl)
         toolbar.addWidget(self.script_type)
 
-        self.script_save_btn = QPushButton("保存脚本")
+        self.script_save_btn = QPushButton(tr("script_save"))
         self.script_save_btn.setProperty("role", "secondaryTool")
         self.script_save_btn.clicked.connect(self.save_script)
-        self.script_load_btn = QPushButton("加载脚本")
+        self.script_load_btn = QPushButton(tr("script_load"))
         self.script_load_btn.setProperty("role", "secondaryTool")
         self.script_load_btn.clicked.connect(self.load_script)
-        self.script_clear_btn = QPushButton("清空")
+        self.script_clear_btn = QPushButton(tr("script_clear"))
         self.script_clear_btn.setProperty("role", "secondaryTool")
         self.script_clear_btn.clicked.connect(self.clear_editor)
-        self.script_run_btn = QPushButton("▶ 运行脚本")
+        self.script_run_btn = QPushButton(tr("script_run"))
         self.script_run_btn.setProperty("role", "primaryRun")
         self.script_run_btn.clicked.connect(self.run_script)
 
@@ -93,8 +93,8 @@ class ScriptTab(QWidget):
         layout.addLayout(toolbar)
 
         # 2. 脚本编辑器
-        script_group = QGroupBox("脚本编辑")
-        sg_layout = QVBoxLayout(script_group)
+        self.script_group = QGroupBox(tr("script_edit_group"))
+        sg_layout = QVBoxLayout(self.script_group)
 
         self.script_edit = QPlainTextEdit()
         gmx_p = self._get_gmx_path().replace("\\", "/")
@@ -109,10 +109,10 @@ class ScriptTab(QWidget):
         self.script_edit.setFont(font)
         self.script_edit.setMinimumHeight(400)
         sg_layout.addWidget(self.script_edit)
-        layout.addWidget(script_group, stretch=1)
+        layout.addWidget(self.script_group, stretch=1)
 
         # 3. 快速模板区
-        self.tmpl_group = QGroupBox("快速模板")
+        self.tmpl_group = QGroupBox(tr("script_tmpl_group"))
         tmpl_layout = QVBoxLayout(self.tmpl_group)
 
         tmpl_row1 = QHBoxLayout()
@@ -216,7 +216,7 @@ class ScriptTab(QWidget):
 
     def load_script_template(self, key: str):
         gmx_norm = self._get_gmx_path().replace("\\", "/")
-        script_type = self.script_type.currentText()
+        script_type = self.script_type.currentData() or self.script_type.currentText()
         text = get_script_template(script_type, key, gmx_norm)
         self.script_edit.setPlainText(text)
 
@@ -250,7 +250,7 @@ class ScriptTab(QWidget):
             self.log_requested.emit("脚本内容为空，请先输入或加载脚本。", "error")
             return
 
-        script_type = self.script_type.currentText()
+        script_type = self.script_type.currentData() or self.script_type.currentText()
         step_name = "自定义脚本"
         self.log_requested.emit("=" * 60, "cmd")
         self.log_requested.emit(f"运行 {script_type}", "cmd")
@@ -279,7 +279,7 @@ class ScriptTab(QWidget):
     # --- 配置兼容接口 ---
     def get_config(self) -> dict:
         return {
-            "script_type": self.script_type.currentText(),
+            "script_type": self.script_type.currentData() or self.script_type.currentText(),
             "script_content": self.script_edit.toPlainText()
         }
 
@@ -287,8 +287,23 @@ class ScriptTab(QWidget):
         if not isinstance(data, dict):
             return
         if "script_type" in data:
-            idx = self.script_type.findText(data["script_type"])
+            val = str(data["script_type"])
+            idx = self.script_type.findData(val)
+            if idx < 0:
+                idx = self.script_type.findText(val)
             if idx >= 0:
                 self.script_type.setCurrentIndex(idx)
         if "script_content" in data and data["script_content"]:
             self.script_edit.setPlainText(data["script_content"])
+
+    def retranslate_ui(self, lang: str):
+        self.info_label.setText(tr("script_info", lang=lang))
+        self.script_type_lbl.setText(tr("script_type_lbl", lang=lang))
+        self.script_type.setItemText(2, "Shell Command" if lang == "en" else "Shell 命令")
+        self.script_save_btn.setText(tr("script_save", lang=lang))
+        self.script_load_btn.setText(tr("script_load", lang=lang))
+        self.script_clear_btn.setText(tr("script_clear", lang=lang))
+        self.script_run_btn.setText(tr("script_run", lang=lang))
+        self.script_group.setTitle(tr("script_edit_group", lang=lang))
+        self.tmpl_group.setTitle(tr("script_tmpl_group", lang=lang))
+        self.tmpl_btn_manage.setText(tr("script_manage_tmpl", lang=lang))

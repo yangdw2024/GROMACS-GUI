@@ -33,6 +33,7 @@ from PyQt5.QtWidgets import (
 )
 
 from simulation.analysis import build_analysis_command
+from gui.i18n import tr
 
 class AnalysisTab(QWidget):
     """Part 5: 结果分析与可视化独立页面组件
@@ -108,8 +109,8 @@ class AnalysisTab(QWidget):
         vbox.setContentsMargins(8, 10, 8, 10)
 
         # 1. 通用分析参数
-        common_group = QGroupBox("通用分析参数")
-        cgrid = QGridLayout(common_group)
+        self.common_group = QGroupBox(tr("ana_common_group"))
+        cgrid = QGridLayout(self.common_group)
 
         self.ana_input_xtc, ana_xtc_layout = self._create_file_input(
             "md.xtc", "md.xtc", "轨迹文件 (*.xtc *.trr *.gro);;所有文件 (*.*)", "选择轨迹文件"
@@ -162,12 +163,12 @@ class AnalysisTab(QWidget):
         cgrid.addWidget(QLabel("时间间隔:"), 3, 2)
         cgrid.addWidget(self.ana_dt, 3, 3)
 
-        vbox.addWidget(common_group)
+        vbox.addWidget(self.common_group)
 
         # 2. 文件管理与校验
-        file_check_group = QGroupBox("📁 文件管理与校验")
-        file_check_group.setProperty("role", "phaseGroup")
-        file_check_layout = QVBoxLayout(file_check_group)
+        self.file_check_group = QGroupBox(tr("ana_file_group"))
+        self.file_check_group.setProperty("role", "phaseGroup")
+        file_check_layout = QVBoxLayout(self.file_check_group)
         file_check_layout.setSpacing(8)
 
         file_check_desc = QLabel("校验轨迹文件完整性，检查核心文件是否存在")
@@ -189,14 +190,14 @@ class AnalysisTab(QWidget):
         file_check_grid.addWidget(self.file_status_btn, 0, 1)
 
         file_check_layout.addLayout(file_check_grid)
-        vbox.addWidget(file_check_group)
+        vbox.addWidget(self.file_check_group)
 
         self.analysis_widgets = {}
 
         # 3. 能量与热力学分析
-        energy_group = QGroupBox("🌡️ 能量与热力学分析")
-        energy_group.setProperty("role", "phaseGroup")
-        energy_layout = QVBoxLayout(energy_group)
+        self.energy_group = QGroupBox(tr("ana_energy_group"))
+        self.energy_group.setProperty("role", "phaseGroup")
+        energy_layout = QVBoxLayout(self.energy_group)
         energy_layout.setSpacing(6)
 
         energy_analyses = [
@@ -235,12 +236,12 @@ class AnalysisTab(QWidget):
             run_btn.clicked.connect(lambda checked=False, k=key: self.run_analysis(k))
             energy_layout.addWidget(grp)
 
-        vbox.addWidget(energy_group)
+        vbox.addWidget(self.energy_group)
 
         # 4. 结构稳定性分析
-        struct_group = QGroupBox("📐 结构稳定性分析")
-        struct_group.setProperty("role", "phaseGroup")
-        struct_layout = QVBoxLayout(struct_group)
+        self.struct_group = QGroupBox(tr("ana_struct_group"))
+        self.struct_group.setProperty("role", "phaseGroup")
+        struct_layout = QVBoxLayout(self.struct_group)
         struct_layout.setSpacing(6)
 
         struct_analyses = [
@@ -288,12 +289,12 @@ class AnalysisTab(QWidget):
             run_btn.clicked.connect(lambda checked=False, k=key: self.run_analysis(k))
             struct_layout.addWidget(grp)
 
-        vbox.addWidget(struct_group)
+        vbox.addWidget(self.struct_group)
 
         # 5. 相互作用分析
-        interact_group = QGroupBox("🔗 相互作用分析")
-        interact_group.setProperty("role", "phaseGroup")
-        interact_layout = QVBoxLayout(interact_group)
+        self.interact_group = QGroupBox(tr("ana_interact_group"))
+        self.interact_group.setProperty("role", "phaseGroup")
+        interact_layout = QVBoxLayout(self.interact_group)
         interact_layout.setSpacing(6)
 
         interact_analyses = [
@@ -369,12 +370,12 @@ class AnalysisTab(QWidget):
         if "saltbr" in self.analysis_widgets:
             self.analysis_widgets["saltbr"]["sel"].setPlaceholderText("蛋白质组（留空使用Protein）")
 
-        vbox.addWidget(interact_group)
+        vbox.addWidget(self.interact_group)
 
         # 6. 片段分析
-        fragment_group = QGroupBox("🧩 片段分析")
-        fragment_group.setProperty("role", "phaseGroup")
-        fragment_layout = QVBoxLayout(fragment_group)
+        self.fragment_group = QGroupBox(tr("ana_fragment_group"))
+        self.fragment_group.setProperty("role", "phaseGroup")
+        fragment_layout = QVBoxLayout(self.fragment_group)
         fragment_layout.setSpacing(8)
 
         # 子模块A: 片段索引生成器
@@ -437,7 +438,7 @@ class AnalysisTab(QWidget):
         self.ndx_gen_output = QLineEdit("fragment.ndx")
         ndx_gen_layout.addWidget(self.ndx_gen_output, 5, 1, 1, 2)
         self.ndx_gen_btn = QPushButton("生成片段索引文件")
-        self.ndx_gen_btn.setProperty("role", "browseBtn")
+        self.ndx_gen_btn.setProperty("role", "actionBtn")
         ndx_gen_layout.addWidget(self.ndx_gen_btn, 5, 3)
 
         self.ndx_add_row_btn.clicked.connect(lambda: self.ndx_gen_table.insertRow(self.ndx_gen_table.rowCount()))
@@ -509,7 +510,7 @@ class AnalysisTab(QWidget):
         rdf_frag_layout.addWidget(self.rdf_frag_outdir, 4, 1, 1, 2)
 
         self.rdf_frag_run_btn = QPushButton("批量计算片段RDF")
-        self.rdf_frag_run_btn.setProperty("role", "browseBtn")
+        self.rdf_frag_run_btn.setProperty("role", "actionBtn")
         rdf_frag_layout.addWidget(self.rdf_frag_run_btn, 4, 3)
         self.rdf_frag_run_btn.clicked.connect(self.run_fragment_rdf_batch)
 
@@ -541,17 +542,17 @@ class AnalysisTab(QWidget):
         pairdist_layout.addWidget(self.pairdist_out, 1, 3)
 
         self.pairdist_run_btn = QPushButton("计算最近邻距离")
-        self.pairdist_run_btn.setProperty("role", "browseBtn")
+        self.pairdist_run_btn.setProperty("role", "actionBtn")
         pairdist_layout.addWidget(self.pairdist_run_btn, 2, 0, 1, 4)
         self.pairdist_run_btn.clicked.connect(self.run_pairdist_analysis)
 
         fragment_layout.addWidget(pairdist_group)
-        vbox.addWidget(fragment_group)
+        vbox.addWidget(self.fragment_group)
 
         # 7. 高级分析方法
-        advanced_group = QGroupBox("📊 高级分析方法")
-        advanced_group.setProperty("role", "phaseGroup")
-        advanced_layout = QVBoxLayout(advanced_group)
+        self.advanced_group = QGroupBox(tr("ana_adv_group"))
+        self.advanced_group.setProperty("role", "phaseGroup")
+        advanced_layout = QVBoxLayout(self.advanced_group)
         advanced_layout.setSpacing(6)
 
         advanced_analyses = [
@@ -598,12 +599,12 @@ class AnalysisTab(QWidget):
             run_btn.clicked.connect(lambda checked=False, k=key: self.run_analysis(k))
             advanced_layout.addWidget(grp)
 
-        vbox.addWidget(advanced_group)
+        vbox.addWidget(self.advanced_group)
 
         # 8. 结果自动绘图
-        plot_group = QGroupBox("📈 结果自动绘图")
-        plot_group.setProperty("role", "phaseGroup")
-        plot_layout = QVBoxLayout(plot_group)
+        self.plot_group = QGroupBox(tr("ana_plot_group"))
+        self.plot_group.setProperty("role", "phaseGroup")
+        plot_layout = QVBoxLayout(self.plot_group)
         plot_layout.setSpacing(8)
 
         plot_desc = QLabel("自动读取xvg文件并生成符合期刊标准的科研图表")
@@ -622,7 +623,10 @@ class AnalysisTab(QWidget):
 
         plot_grid.addWidget(QLabel("图表类型:"), 1, 0)
         self.plot_type = QComboBox()
-        self.plot_type.addItems(["折线图 (Line)", "柱状图 (Bar)", "散点图 (Scatter)", "多曲线对比"])
+        self.plot_type.addItem("折线图 (Line)", "line")
+        self.plot_type.addItem("柱状图 (Bar)", "bar")
+        self.plot_type.addItem("散点图 (Scatter)", "scatter")
+        self.plot_type.addItem("多曲线对比", "multi")
         plot_grid.addWidget(self.plot_type, 1, 1)
 
         plot_grid.addWidget(QLabel("X轴标签:"), 1, 2)
@@ -650,16 +654,16 @@ class AnalysisTab(QWidget):
         plot_layout.addLayout(plot_grid)
 
         self.plot_run_btn = QPushButton("生成图表")
-        self.plot_run_btn.setProperty("role", "browseBtn")
+        self.plot_run_btn.setProperty("role", "actionBtn")
         self.plot_run_btn.clicked.connect(self.generate_plot)
         plot_layout.addWidget(self.plot_run_btn)
 
-        vbox.addWidget(plot_group)
+        vbox.addWidget(self.plot_group)
 
         # 9. 能量分解分析
-        energy_decomp_group = QGroupBox("⚡ 能量分解分析")
-        energy_decomp_group.setProperty("role", "phaseGroup")
-        energy_decomp_layout = QVBoxLayout(energy_decomp_group)
+        self.energy_decomp_group = QGroupBox(tr("ana_ed_group"))
+        self.energy_decomp_group.setProperty("role", "phaseGroup")
+        energy_decomp_layout = QVBoxLayout(self.energy_decomp_group)
         energy_decomp_layout.setSpacing(8)
 
         energy_decomp_desc = QLabel("提取并分解能量项，分析组分间相互作用")
@@ -687,16 +691,16 @@ class AnalysisTab(QWidget):
         energy_decomp_layout.addLayout(ed_grid)
 
         self.ed_run_btn = QPushButton("提取能量数据")
-        self.ed_run_btn.setProperty("role", "browseBtn")
+        self.ed_run_btn.setProperty("role", "actionBtn")
         self.ed_run_btn.clicked.connect(self.run_energy_decomposition)
         energy_decomp_layout.addWidget(self.ed_run_btn)
 
-        vbox.addWidget(energy_decomp_group)
+        vbox.addWidget(self.energy_decomp_group)
 
         # 10. 批量处理系统
-        batch_group = QGroupBox("📦 批量处理系统")
-        batch_group.setProperty("role", "phaseGroup")
-        batch_layout = QVBoxLayout(batch_group)
+        self.batch_group = QGroupBox(tr("ana_batch_group"))
+        self.batch_group.setProperty("role", "phaseGroup")
+        batch_layout = QVBoxLayout(self.batch_group)
         batch_layout.setSpacing(8)
 
         batch_desc = QLabel("同时处理多个模拟体系的数据，自动执行全套分析流程")
@@ -730,17 +734,15 @@ class AnalysisTab(QWidget):
 
         batch_grid.addWidget(QLabel("分析流程:"), 2, 0)
         self.batch_flow = QComboBox()
-        self.batch_flow.addItems([
-            "标准流程 (RMSD + RMSF + g(r) + MSD)",
-            "结构稳定性 (RMSD + RMSF + Rg)",
-            "相互作用 (g(r) + 氢键 + 最近邻)",
-            "扩散动力学 (MSD + 密度)",
-            "全套分析 (全部)"
-        ])
+        self.batch_flow.addItem("标准流程 (RMSD + RMSF + g(r) + MSD)", "std")
+        self.batch_flow.addItem("结构稳定性 (RMSD + RMSF + Rg)", "struct")
+        self.batch_flow.addItem("相互作用 (g(r) + 氢键 + 最近邻)", "interact")
+        self.batch_flow.addItem("扩散动力学 (MSD + 密度)", "diff")
+        self.batch_flow.addItem("全套分析 (全部)", "all")
         batch_grid.addWidget(self.batch_flow, 2, 1, 1, 2)
 
         self.batch_run_btn = QPushButton("开始批量处理")
-        self.batch_run_btn.setProperty("role", "browseBtn")
+        self.batch_run_btn.setProperty("role", "primaryRun")
         batch_grid.addWidget(self.batch_run_btn, 2, 3)
 
         batch_layout.addLayout(batch_grid)
@@ -751,7 +753,7 @@ class AnalysisTab(QWidget):
         self.batch_load_dir_btn.clicked.connect(self.load_batch_from_directory)
         self.batch_run_btn.clicked.connect(self.run_batch_processing)
 
-        vbox.addWidget(batch_group)
+        vbox.addWidget(self.batch_group)
         vbox.addStretch()
 
     def run_file_check(self):
@@ -879,17 +881,22 @@ class AnalysisTab(QWidget):
             QMessageBox.warning(self, "警告", "请先添加模拟体系！")
             return
 
-        flow = self.batch_flow.currentText()
-        self.log_requested.emit(f"开始批量处理: {flow} | 共 {row_count} 个体系", "info")
+        flow_key = self.batch_flow.currentData() or self.batch_flow.currentText()
+        self.log_requested.emit(f"开始批量处理: {self.batch_flow.currentText()} | 共 {row_count} 个体系", "info")
 
         analysis_flows = {
+            "std": ["rms", "rmsf", "rdf", "msd"],
+            "struct": ["rms", "rmsf", "gyrate"],
+            "interact": ["rdf", "hbond", "pairdist"],
+            "diff": ["msd", "density"],
+            "all": ["rms", "rmsf", "gyrate", "rdf", "hbond", "msd", "density", "sasa"],
             "标准流程 (RMSD + RMSF + g(r) + MSD)": ["rms", "rmsf", "rdf", "msd"],
             "结构稳定性 (RMSD + RMSF + Rg)": ["rms", "rmsf", "gyrate"],
             "相互作用 (g(r) + 氢键 + 最近邻)": ["rdf", "hbond", "pairdist"],
             "扩散动力学 (MSD + 密度)": ["msd", "density"],
-            "全套分析 (全部)": ["rms", "rmsf", "gyrate", "rdf", "hbond", "msd", "density", "sasa"]
+            "全套分析 (全部)": ["rms", "rmsf", "gyrate", "rdf", "hbond", "msd", "density", "sasa"],
         }
-        selected_analyses = analysis_flows.get(flow, ["rms", "rmsf"])
+        selected_analyses = analysis_flows.get(flow_key, ["rms", "rmsf"])
 
         for i in range(row_count):
             wd_item = self.batch_table.item(i, 0)
@@ -1193,7 +1200,7 @@ class AnalysisTab(QWidget):
             xvg_file = os.path.basename(xvg_files[0])
             self.plot_input.setText(xvg_file)
 
-        plot_type = self.plot_type.currentText()
+        plot_type = self.plot_type.currentData() or self.plot_type.currentText()
         xlabel = self.plot_xlabel.text().strip()
         ylabel = self.plot_ylabel.text().strip()
         title = self.plot_title.text().strip()
@@ -1226,14 +1233,14 @@ class AnalysisTab(QWidget):
 
             fig, ax = plt.subplots(figsize=(8, 5), dpi=dpi)
 
-            if "多曲线对比" in plot_type:
+            if plot_type == "multi" or "多曲线对比" in str(plot_type):
                 for i, y in enumerate(data[1:], 1):
                     label = legends[i-1] if i-1 < len(legends) else f"Series {i}"
                     ax.plot(x, y, label=label, linewidth=1.5)
                 ax.legend()
-            elif "柱状图" in plot_type:
+            elif plot_type == "bar" or "柱状图" in str(plot_type):
                 ax.bar(x, data[1], color='#C2185B', alpha=0.8)
-            elif "散点图" in plot_type:
+            elif plot_type == "scatter" or "散点图" in str(plot_type):
                 ax.scatter(x, data[1], color='#C2185B', alpha=0.6, s=20)
             else:
                 ax.plot(x, data[1], color='#C2185B', linewidth=1.5)
@@ -1342,3 +1349,38 @@ class AnalysisTab(QWidget):
                         self.analysis_widgets[k]["sel"].setText(str(tool_data["sel"]))
                     if "ref" in tool_data:
                         self.analysis_widgets[k]["ref"].setText(str(tool_data["ref"]))
+
+
+    def retranslate_ui(self, lang: str):
+        self.common_group.setTitle(tr("ana_common_group", lang=lang))
+        self.file_check_group.setTitle(tr("ana_file_group", lang=lang))
+        self.energy_group.setTitle(tr("ana_energy_group", lang=lang))
+        self.struct_group.setTitle(tr("ana_struct_group", lang=lang))
+        self.interact_group.setTitle(tr("ana_interact_group", lang=lang))
+        self.fragment_group.setTitle(tr("ana_fragment_group", lang=lang))
+        self.advanced_group.setTitle(tr("ana_adv_group", lang=lang))
+        self.plot_group.setTitle(tr("ana_plot_group", lang=lang))
+        self.energy_decomp_group.setTitle(tr("ana_ed_group", lang=lang))
+        self.batch_group.setTitle(tr("ana_batch_group", lang=lang))
+        for w in self.analysis_widgets.values():
+            w["run_btn"].setText(tr("run_tool", lang=lang))
+        if lang == "en":
+            self.plot_type.setItemText(0, "Line Chart")
+            self.plot_type.setItemText(1, "Bar Chart")
+            self.plot_type.setItemText(2, "Scatter Plot")
+            self.plot_type.setItemText(3, "Multi-Series Comparison")
+            self.batch_flow.setItemText(0, "Standard (RMSD + RMSF + RDF + MSD)")
+            self.batch_flow.setItemText(1, "Structural Stability (RMSD + RMSF + Rg)")
+            self.batch_flow.setItemText(2, "Interactions (RDF + H-Bond + Pairdist)")
+            self.batch_flow.setItemText(3, "Diffusion (MSD + Density)")
+            self.batch_flow.setItemText(4, "Full Suite (All)")
+        else:
+            self.plot_type.setItemText(0, "折线图 (Line)")
+            self.plot_type.setItemText(1, "柱状图 (Bar)")
+            self.plot_type.setItemText(2, "散点图 (Scatter)")
+            self.plot_type.setItemText(3, "多曲线对比")
+            self.batch_flow.setItemText(0, "标准流程 (RMSD + RMSF + g(r) + MSD)")
+            self.batch_flow.setItemText(1, "结构稳定性 (RMSD + RMSF + Rg)")
+            self.batch_flow.setItemText(2, "相互作用 (g(r) + 氢键 + 最近邻)")
+            self.batch_flow.setItemText(3, "扩散动力学 (MSD + 密度)")
+            self.batch_flow.setItemText(4, "全套分析 (全部)")

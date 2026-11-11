@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
 )
 
 from simulation.analysis import build_structure_tool_command
+from gui.i18n import tr
 
 class StructureTab(QWidget):
     """Part 2: 结构处理工具独立页面组件
@@ -87,8 +88,8 @@ class StructureTab(QWidget):
         vbox.setContentsMargins(8, 10, 8, 10)
 
         # 通用参数
-        common_group = QGroupBox("结构处理参数")
-        cgrid = QGridLayout(common_group)
+        self.common_group = QGroupBox(tr("struc_common_group"))
+        cgrid = QGridLayout(self.common_group)
 
         self.struc_input, struc_input_layout = self._create_file_input(
             "protein.pdb", "protein.pdb", "结构文件 (*.gro *.pdb);;所有文件 (*.*)", "选择输入结构"
@@ -102,14 +103,14 @@ class StructureTab(QWidget):
         cgrid.addWidget(QLabel("索引文件:"), 0, 2)
         cgrid.addLayout(struc_idx_layout, 0, 3)
 
-        vbox.addWidget(common_group)
+        vbox.addWidget(self.common_group)
 
         self.struc_widgets = {}
 
         # === 第一组: 核心结构准备 ===
-        prep_group = QGroupBox("🔧 核心结构准备")
-        prep_group.setProperty("role", "phaseGroup")
-        prep_layout = QVBoxLayout(prep_group)
+        self.prep_group = QGroupBox(tr("struc_prep_group"))
+        self.prep_group.setProperty("role", "phaseGroup")
+        prep_layout = QVBoxLayout(self.prep_group)
         prep_layout.setSpacing(8)
 
         # 创建索引 (gmx make_ndx)
@@ -123,7 +124,7 @@ class StructureTab(QWidget):
         ndx_opt_edit.setPlaceholderText("如 -select 'resname ALA'")
 
         ndx_run_btn = QPushButton("运行创建索引")
-        ndx_run_btn.setProperty("role", "browseBtn")
+        ndx_run_btn.setProperty("role", "primaryRun")
 
         ndx_struc_edit, ndx_struc_layout = self._create_file_input(
             "input.gro", "", "结构文件 (*.gro *.pdb);;所有文件 (*.*)", "选择输入结构"
@@ -145,7 +146,7 @@ class StructureTab(QWidget):
         ]
         for btn_name, select_expr in ndx_btns:
             btn = QPushButton(btn_name)
-            btn.setProperty("role", "browseBtn")
+            btn.setProperty("role", "secondaryTool")
             btn.clicked.connect(lambda checked=False, expr=select_expr: ndx_opt_edit.setText(expr))
             ndx_btn_layout.addWidget(btn)
         ndx_g.addLayout(ndx_btn_layout, 2, 1, 1, 3)
@@ -154,7 +155,7 @@ class StructureTab(QWidget):
         ndx_custom_edit = QLineEdit()
         ndx_custom_edit.setPlaceholderText("如 -select 'resname ALA' 或 -select 'index 0'")
         ndx_apply_btn = QPushButton("应用")
-        ndx_apply_btn.setProperty("role", "browseBtn")
+        ndx_apply_btn.setProperty("role", "secondaryTool")
         ndx_apply_btn.clicked.connect(lambda: ndx_opt_edit.setText(ndx_custom_edit.text()))
         ndx_g.addWidget(ndx_custom_edit, 3, 1, 1, 2)
         ndx_g.addWidget(ndx_apply_btn, 3, 3)
@@ -207,12 +208,12 @@ class StructureTab(QWidget):
             run_btn.clicked.connect(lambda checked=False, k=key: self.run_structure_tool(k))
             prep_layout.addWidget(grp)
 
-        vbox.addWidget(prep_group)
+        vbox.addWidget(self.prep_group)
 
         # === 第二组: 结构转换与验证 ===
-        convert_group = QGroupBox("🔄 结构转换与验证")
-        convert_group.setProperty("role", "phaseGroup")
-        convert_layout = QVBoxLayout(convert_group)
+        self.convert_group = QGroupBox(tr("struc_convert_group"))
+        self.convert_group.setProperty("role", "phaseGroup")
+        convert_layout = QVBoxLayout(self.convert_group)
         convert_layout.setSpacing(8)
 
         convert_tools = [
@@ -249,12 +250,12 @@ class StructureTab(QWidget):
             run_btn.clicked.connect(lambda checked=False, k=key: self.run_structure_tool(k))
             convert_layout.addWidget(grp)
 
-        vbox.addWidget(convert_group)
+        vbox.addWidget(self.convert_group)
 
         # 提示信息
-        tip_label = QLabel("💡 提示：轨迹分析工具（RMSD/RMSF/SASA/氢键/RDF等）已移至 Part 5 结果分析")
-        tip_label.setProperty("role", "warningBanner")
-        vbox.addWidget(tip_label)
+        self.tip_label = QLabel(tr("struc_tip"))
+        self.tip_label.setProperty("role", "warningBanner")
+        vbox.addWidget(self.tip_label)
         vbox.addStretch()
 
     def run_structure_tool(self, key: str):
@@ -331,3 +332,12 @@ class StructureTab(QWidget):
                         self.struc_widgets[k]["ndx_struc"].setText(str(tool_data["ndx_struc"]))
                     if "custom" in tool_data and "custom" in self.struc_widgets[k]:
                         self.struc_widgets[k]["custom"].setText(str(tool_data["custom"]))
+
+    def retranslate_ui(self, lang: str):
+        self.common_group.setTitle(tr("struc_common_group", lang=lang))
+        self.prep_group.setTitle(tr("struc_prep_group", lang=lang))
+        self.convert_group.setTitle(tr("struc_convert_group", lang=lang))
+        self.tip_label.setText(tr("struc_tip", lang=lang))
+        for k, w in self.struc_widgets.items():
+            if k != "gmx make_ndx":
+                w["run_btn"].setText(tr("run_tool", lang=lang))
