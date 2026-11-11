@@ -24,8 +24,7 @@ from simulation.mdp_builder import (
 )
 from simulation.analysis import (
     build_analysis_command, build_trajectory_tool_command,
-    build_structure_tool_command, build_preprocessing_commands,
-    build_mmpbsa_command
+    build_structure_tool_command, build_preprocessing_commands
 )
 from simulation.md_runner import (
     build_md_step_command, build_annealing_commands,
@@ -72,6 +71,7 @@ from gui.dialogs.mdp_editor import MdpEditorDialog
 
 from gui.dialogs.simulation_monitor import SimulationMonitorDialog
 from gui.tabs.script_tab import ScriptTab
+from gui.tabs.mmpbsa_tab import MmpbsaTab
 
 
 from gui.workers.gromacs_worker import GromacsWorker
@@ -553,7 +553,8 @@ class GromacsGUI(QMainWindow):
         self.tab_widget.addTab(self.create_advanced_tab(), "Part 3: 高级模拟")
         self.tab_widget.addTab(self.create_trajectory_tab(), "Part 4: 轨迹处理")
         self.tab_widget.addTab(self.create_analysis_tab(), "Part 5: 结果分析")
-        self.tab_widget.addTab(self.create_mmpbsa_tab(), "Part 6: MMPBSA")
+        self.mmpbsa_tab = self.create_mmpbsa_tab()
+        self.tab_widget.addTab(self.mmpbsa_tab, "Part 6: MMPBSA")
         self.script_tab = self.create_script_tab()
         self.tab_widget.addTab(self.script_tab, "Part 7: 自定义脚本")
         self.tab_widget.tabBar().setVisible(False)
@@ -4326,132 +4327,29 @@ class GromacsGUI(QMainWindow):
         return tab
 
     # -------------------------------------------------------------------------
-    # Part 6: MMPBSA
+    # Part 6: MMPBSA (已委托至 gui.tabs.mmpbsa_tab.MmpbsaTab)
     # -------------------------------------------------------------------------
     def create_mmpbsa_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(12)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        layout.addWidget(scroll)
-
-        content = QWidget()
-        scroll.setWidget(content)
-        vbox = QVBoxLayout(content)
-        vbox.setSpacing(14)
-        vbox.setContentsMargins(8, 10, 8, 10)
-
-        info = QLabel(
-            "MMPBSA (Molecular Mechanics Poisson-Boltzmann Surface Area) "
-            "结合自由能计算。\n请确保已安装 gmx_MMPBSA 或相关脚本。"
+        tab = MmpbsaTab(
+            get_work_dir=self._get_work_dir,
+            parent=self
         )
-        info.setWordWrap(True)
-        info.setStyleSheet("color: #555; font-size: 12px;")
-        vbox.addWidget(info)
+        tab.run_requested.connect(self.run_command)
+        tab.log_requested.connect(self.add_log)
 
-        inp_group = QGroupBox("输入文件参数")
-        inp_group.setStyleSheet("QGroupBox { font-weight: bold; color: #1565C0; }")
-        igrid = QGridLayout(inp_group)
-
-        self.mmpbsa_tpr = QLineEdit("md.tpr")
-        self.mmpbsa_xtc = QLineEdit("md.xtc")
-        self.mmpbsa_index = QLineEdit("index.ndx")
-        self.mmpbsa_top = QLineEdit("topol.top")
-
-        igrid.addWidget(QLabel("运行输入:"), 0, 0)
-        igrid.addWidget(self.mmpbsa_tpr, 0, 1)
-        igrid.addWidget(QLabel("轨迹文件:"), 0, 2)
-        igrid.addWidget(self.mmpbsa_xtc, 0, 3)
-
-        igrid.addWidget(QLabel("索引文件:"), 1, 0)
-        igrid.addWidget(self.mmpbsa_index, 1, 1)
-        igrid.addWidget(QLabel("拓扑文件:"), 1, 2)
-        igrid.addWidget(self.mmpbsa_top, 1, 3)
-
-        vbox.addWidget(inp_group)
-
-        sam_group = QGroupBox("采样与计算参数")
-        sam_group.setStyleSheet("QGroupBox { font-weight: bold; color: #2E7D32; }")
-        sgrid = QGridLayout(sam_group)
-
-        self.mmpbsa_start = QDoubleSpinBox()
-        self.mmpbsa_start.setRange(0, 1000000)
-        self.mmpbsa_start.setValue(0)
-        self.mmpbsa_start.setDecimals(1)
-        self.mmpbsa_start.setSuffix(" ps")
-
-        self.mmpbsa_end = QDoubleSpinBox()
-        self.mmpbsa_end.setRange(0, 1000000)
-        self.mmpbsa_end.setValue(0)
-        self.mmpbsa_end.setDecimals(1)
-        self.mmpbsa_end.setSuffix(" ps (0=到结尾)")
-
-        self.mmpbsa_interval = QDoubleSpinBox()
-        self.mmpbsa_interval.setRange(1, 100000)
-        self.mmpbsa_interval.setValue(1000)
-        self.mmpbsa_interval.setDecimals(0)
-        self.mmpbsa_interval.setSuffix(" ps")
-
-        self.mmpbsa_nt = QSpinBox()
-        self.mmpbsa_nt.setRange(1, 64)
-        self.mmpbsa_nt.setValue(4)
-
-        sgrid.addWidget(QLabel("计算开始时间:"), 0, 0)
-        sgrid.addWidget(self.mmpbsa_start, 0, 1)
-        sgrid.addWidget(QLabel("计算结束时间:"), 0, 2)
-        sgrid.addWidget(self.mmpbsa_end, 0, 3)
-
-        sgrid.addWidget(QLabel("采样时间间隔:"), 1, 0)
-        sgrid.addWidget(self.mmpbsa_interval, 1, 1)
-        sgrid.addWidget(QLabel("并行线程数:"), 1, 2)
-        sgrid.addWidget(self.mmpbsa_nt, 1, 3)
-
-        vbox.addWidget(sam_group)
-
-        img_group = QGroupBox("结果图片输出设置")
-        img_group.setStyleSheet("QGroupBox { font-weight: bold; color: #E65100; }")
-        imgrid = QGridLayout(img_group)
-
-        self.mmpbsa_fmt = QComboBox()
-        self.mmpbsa_fmt.addItems(["png", "pdf", "svg", "jpg", "tiff"])
-
-        self.mmpbsa_width = QDoubleSpinBox()
-        self.mmpbsa_width.setRange(1, 50)
-        self.mmpbsa_width.setValue(8)
-        self.mmpbsa_width.setDecimals(1)
-        self.mmpbsa_width.setSuffix(" inch")
-
-        self.mmpbsa_height = QDoubleSpinBox()
-        self.mmpbsa_height.setRange(1, 50)
-        self.mmpbsa_height.setValue(6)
-        self.mmpbsa_height.setDecimals(1)
-        self.mmpbsa_height.setSuffix(" inch")
-
-        imgrid.addWidget(QLabel("图片格式:"), 0, 0)
-        imgrid.addWidget(self.mmpbsa_fmt, 0, 1)
-        imgrid.addWidget(QLabel("图片宽度:"), 0, 2)
-        imgrid.addWidget(self.mmpbsa_width, 0, 3)
-
-        imgrid.addWidget(QLabel("图片高度:"), 1, 0)
-        imgrid.addWidget(self.mmpbsa_height, 1, 1)
-
-        vbox.addWidget(img_group)
-
-        run_layout = QHBoxLayout()
-        self.mmpbsa_run_btn = QPushButton("运行 MMPBSA 计算")
-        self.mmpbsa_run_btn.setStyleSheet(
-            "QPushButton { background-color: #9C27B0; color: white; font-weight: bold; font-size: 14px; padding: 10px 24px; }"
-            "QPushButton:hover { background-color: #7B1FA2; }"
-        )
-        self.mmpbsa_run_btn.clicked.connect(self.run_mmpbsa)
-        run_layout.addStretch()
-        run_layout.addWidget(self.mmpbsa_run_btn)
-        run_layout.addStretch()
-        vbox.addLayout(run_layout)
-
-        vbox.addStretch()
+        # 暴露原有属性别名，保持 100% 向后兼容
+        self.mmpbsa_tpr = tab.mmpbsa_tpr
+        self.mmpbsa_xtc = tab.mmpbsa_xtc
+        self.mmpbsa_index = tab.mmpbsa_index
+        self.mmpbsa_top = tab.mmpbsa_top
+        self.mmpbsa_start = tab.mmpbsa_start
+        self.mmpbsa_end = tab.mmpbsa_end
+        self.mmpbsa_interval = tab.mmpbsa_interval
+        self.mmpbsa_nt = tab.mmpbsa_nt
+        self.mmpbsa_fmt = tab.mmpbsa_fmt
+        self.mmpbsa_width = tab.mmpbsa_width
+        self.mmpbsa_height = tab.mmpbsa_height
+        self.mmpbsa_run_btn = tab.mmpbsa_run_btn
         return tab
 
     # -------------------------------------------------------------------------
@@ -7026,28 +6924,11 @@ class GromacsGUI(QMainWindow):
         self.run_command([cmd], wd, step_name)
 
     # -------------------------------------------------------------------------
-    # Part 6: MMPBSA 执行
+    # Part 6: MMPBSA 执行 (已委托至 gui.tabs.mmpbsa_tab.MmpbsaTab)
     # -------------------------------------------------------------------------
     def run_mmpbsa(self):
-        wd = self._get_work_dir()
-        if not wd:
-            return
-
-        files = {
-            "tpr": self.mmpbsa_tpr.text().strip() or "md.tpr",
-            "xtc": self.mmpbsa_xtc.text().strip() or "md.xtc",
-            "ndx": self.mmpbsa_index.text().strip() or "index.ndx",
-            "top": self.mmpbsa_top.text().strip() or "topol.top",
-        }
-        cmd, step_name = build_mmpbsa_command(files)
-
-        self.add_log("=" * 60, "cmd")
-        self.add_log(step_name, "cmd")
-        self.add_log("提示: MMPBSA 需要安装 gmx_MMPBSA 包", "warning")
-        self.add_log("  pip install gmx-MMPBSA", "warning")
-        self.add_log("=" * 60, "cmd")
-
-        self.run_command([cmd], wd, step_name)
+        if hasattr(self, "mmpbsa_tab"):
+            self.mmpbsa_tab.run_mmpbsa()
 
     # -------------------------------------------------------------------------
     # Part 7: 自定义脚本 (已委托至 gui.tabs.script_tab.ScriptTab)
