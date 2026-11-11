@@ -6,26 +6,26 @@
 #define MyAppName "GROMACS GUI"
 #define MyAppFullName "GROMACS 动力学模拟与分析集成工具"
 #define MyAppVersion "4.3.0"
-#define MyAppPublisher "Trae"
-#define MyAppURL "https://github.com/Trae/GROMACS-GUI"
+#define MyAppPublisher "YangDewu"
+#define MyAppURL "https://github.com/yangdw2024/GROMACS-GUI"
 #define MyAppExeName "GROMACS_GUI_v4.3.0.exe"
 #define MyAppIcon "app_icon.ico"
 
 [Setup]
 ; 基本设置
-AppId={{GROMACS-GUI-v4-3-0-Trae}}
+AppId={{GROMACS-GUI-v4-3-0-YangDewu}}
 AppName={#MyAppName}
 AppVerName={#MyAppName} {#MyAppVersion}
-AppCopyright=Copyright (c) 2026 Trae. All rights reserved.
+AppCopyright=Copyright (c) 2026 YangDewu. All rights reserved.
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
-AppContact=Trae
+AppContact=YangDewu
 
 ; 版本信息
 VersionInfoVersion=4.3.0.0
-VersionInfoCompany=Trae
+VersionInfoCompany=YangDewu
 VersionInfoDescription=GROMACS 动力学模拟与分析集成工具
 VersionInfoTextVersion=4.3.0
 VersionInfoProductVersion=4.3.0.0
@@ -36,13 +36,13 @@ DefaultDirName={autopf}\GROMACS_GUI
 DefaultGroupName=GROMACS GUI
 DisableProgramGroupPage=yes
 
-; 安装程序外观
-SetupIconFile=D:\YDW\Trae_Gromacs\resources\app_icon.ico
+; 安装程序外观（使用相对路径，保证任意路径可复现构建）
+SetupIconFile=..\resources\app_icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 LZMAUseSeparateProcess=yes
 WizardStyle=modern
-PrivilegesRequired=admin
+PrivilegesRequired=lowest
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 
@@ -51,7 +51,7 @@ UninstallDisplayIcon={app}\GROMACS_GUI_v4.3.0.exe
 UninstallDisplayName=GROMACS GUI v4.3.0
 
 ; 输出设置
-OutputDir=D:\YDW\Trae_Gromacs\release
+OutputDir=..\release
 OutputBaseFilename=GROMACS_GUI_v4.3.0_Setup
 
 ; 磁盘空间要求 (约2GB)
@@ -65,27 +65,15 @@ Name: "desktopicon"; Description: "在桌面上创建快捷方式"; GroupDescrip
 Name: "quicklaunchicon"; Description: "在快速启动栏创建快捷方式"; GroupDescription: "附加图标: "
 
 [Files]
-; 主程序及依赖
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\GROMACS_GUI_v4.3.0.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+; 主程序及依赖（不包含第三方 GROMACS 二进制）
+Source: "..\dist\GROMACS_GUI_v4.3.0\GROMACS_GUI_v4.3.0.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\GROMACS_GUI_v4.3.0\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; 资源文件
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\resources\*"; DestDir: "{app}\resources"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; 配置文件
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\config\*"; DestDir: "{app}\config"; Flags: ignoreversion recursesubdirs createallsubdirs onlyifdoesntexist
-
-; 版本配置
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\version.config"; DestDir: "{app}"; Flags: ignoreversion
-
-; 说明书
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\说明书.md"; DestDir: "{app}"; Flags: ignoreversion
-
-; GROMACS 程序
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\gromacs\*"; DestDir: "{app}\gromacs"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; 启动脚本
-Source: "D:\YDW\Trae_Gromacs\dist\GROMACS_GUI_v4.3.0\启动GROMACS_GUI_v4.bat"; DestDir: "{app}"; Flags: ignoreversion
+; 版本配置与说明文档
+Source: "..\dist\GROMACS_GUI_v4.3.0\version.config"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\GROMACS_GUI_v4.3.0\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\GROMACS_GUI_v4.3.0\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\GROMACS_GUI_v4.3.0\说明书.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{group}\GROMACS GUI"; Filename: "{app}\GROMACS_GUI_v4.3.0.exe"; IconFilename: "{app}\GROMACS_GUI_v4.3.0.exe"; Comment: "启动 GROMACS GUI v4.3.0"

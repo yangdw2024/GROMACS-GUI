@@ -217,12 +217,23 @@ Python版本: {sys.version}
                 except Exception:
                     pass
 
-            # 控制台输出（带颜色）
-            if sys.platform != "win32" or "ANSICON" in os.environ:
-                color = LEVEL_COLORS.get(level, "")
-                print(f"{color}{formatted}{RESET_COLOR}")
-            else:
-                print(formatted)
+            # 控制台安全输出（带颜色，防 Windows GBK 编码崩溃）
+            if sys.stdout is not None:
+                try:
+                    if sys.platform != "win32" or "ANSICON" in os.environ:
+                        color = LEVEL_COLORS.get(level, "")
+                        print(f"{color}{formatted}{RESET_COLOR}")
+                    else:
+                        print(formatted)
+                except UnicodeEncodeError:
+                    try:
+                        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+                        safe_out = formatted.encode(enc, errors="replace").decode(enc, errors="replace")
+                        print(safe_out)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
 
             # 通知UI回调
             for cb in self._ui_callbacks:

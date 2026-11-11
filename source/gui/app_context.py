@@ -32,17 +32,24 @@ def _get_app_root():
     return Path(__file__).parent.parent
 
 def get_version_config():
+    candidates = []
     if getattr(sys, 'frozen', False):
-        base = os.path.dirname(sys.executable)
+        candidates.append(os.path.dirname(sys.executable))
+        if hasattr(sys, '_MEIPASS'):
+            candidates.append(sys._MEIPASS)
     else:
         # __file__ = source/gui/app_context.py，三级上溯到项目根（version.config 所在）
-        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    config_path = os.path.join(base, "version.config")
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"display_name": "GROMACS 动力学模拟与分析集成工具", "version_string": "4.2.0", "full_version": "v4.2.0"}
+        candidates.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+    for base in candidates:
+        config_path = os.path.join(base, "version.config")
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+    return {"product_name": "GROMACS-GUI", "display_name": "GROMACS 动力学模拟与分析集成工具", "version_string": "4.3.0", "full_version": "v4.3.0"}
 
 VERSION_CONFIG = get_version_config()
 

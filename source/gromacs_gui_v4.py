@@ -22,7 +22,10 @@ from gui.dialogs.help_dialog import HelpDialog
 from gui.dialogs.custom_template import CustomTemplateDialog
 from gui.dialogs.mdp_editor import MdpEditorDialog
 from gui.main_window import GromacsGUI
+import multiprocessing
+import sys
 from gui.app import run_main
 
 if __name__ == "__main__":
-    run_main()
+    multiprocessing.freeze_support()
+    sys.exit(run_main() or 0)
