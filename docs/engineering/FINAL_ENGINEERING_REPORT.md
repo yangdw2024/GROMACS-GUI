@@ -49,7 +49,7 @@
 
 1. **SA 溶剂蒸发安全闭环**：逐轮 NPT 结构/速度继承、严格跨轮 CPT 隔离、未完成轮次 `pending_top` 检验恢复；新增基于分子几何中心 Z 坐标排序的物理空间删除 (`z_top`/`z_bottom`)，同时保留 `bottom`/`top` 旧版 GRO 顺序行为零变化。
 2. **grompp `-maxwarn` 治理与后置物理自检 (`source/simulation/validation.py`)**：全面废除盲目的 `-maxwarn 200`，实施 `SA_SAFE_MAXWARN = 5` 与 `0~10` 硬限制；提供 `validate_gro_structure()` 与 `validate_md_log()`，准确拦截 `NaN/Inf`、盒子塌陷、LINCS/SETTLE 爆炸，同时**显式豁免 NPT 凝聚相正常压力自然波动**。
-3. **MMPBSA 全功能增强 (Issue #5 已关闭)**：时间 (ps) 按 `traj_dt_ps` 严格换算为 1-based 帧索引，支持扫描 `.ndx` 动态指定 `-cg` 组别，自动生成 `mmpbsa.in`、MPI 并行与 `gmx_MMPBSA` 环境前置检测；并明确标识有机电子材料体系为实验性用途。
+3. **MMPBSA 全功能增强 (Issue #5 已关闭)**：时间 (ps) 按 `traj_dt_ps` 严格换算为 1-based 帧索引，支持扫描 `.ndx` 动态指定 `-cg` 组别，自动生成 `mmpbsa.in`、MPI 并行与 `gmx_MMPBSA` 环境前置检测；并明确标识非标准复合物体系为实验性用途。
 
 ---
 

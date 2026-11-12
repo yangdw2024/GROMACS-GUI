@@ -63,7 +63,7 @@ Produces a clean portable archive under `release/` (`GROMACS-GUI-v<version>-win6
 
 ## Scientific Scope & Licensing Notice
 
-1. **MMPBSA Module (Experimental for Non-Protein Systems)**: Converts physical simulation time (ps) into 1-based frames via explicit trajectory frame spacing (`traj_dt_ps`), parses real `.ndx` group headers (replacing hardcoded `-cg 1 13`), generates `mmpbsa.in`, and checks `gmx_MMPBSA` availability before execution. Using MM/PBSA on synthetic polymer/small-molecule blends remains experimental and requires user validation of force-field & dielectric settings.
+1. **MMPBSA Module (Experimental Scope)**: Converts physical simulation time (ps) into 1-based frames via explicit trajectory frame spacing (`traj_dt_ps`), parses real `.ndx` group headers (replacing hardcoded `-cg 1 13`), generates `mmpbsa.in`, and checks `gmx_MMPBSA` availability before execution. Using MM/PBSA on non-standard complex systems remains an experimental utility and requires user validation of force-field & dielectric settings.
 2. **Licensing Discrepancy Notice**: Root [`LICENSE`](LICENSE) specifies the MIT License, whereas the in-app EULA (`source/gui/app.py`) includes a non-commercial restriction. Formal stable release tagging awaits explicit copyright owner resolution between Option A (pure MIT) and Option B (non-commercial license).
 
 ---
